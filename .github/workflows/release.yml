@@ -133,13 +133,16 @@ jobs:
           echo "DMG_PATH=$DMG" >> "$GITHUB_ENV"
           ls -lh "$DMG"
           # Guard against shipping a broken host-Framework Python symlink.
-          EMBED_PY="native/Standing/Standing.app/Contents/Resources/StandingPayload/python/bin/python3"
+          # Use absolute paths: the check cds into StandingPayload, so a
+          # repo-relative EMBED_PY would resolve incorrectly after cd.
+          PAYLOAD="$(pwd)/native/Standing/Standing.app/Contents/Resources/StandingPayload"
+          EMBED_PY="$PAYLOAD/python/bin/python3"
           if [[ ! -x "$EMBED_PY" ]]; then
-            EMBED_PY="native/Standing/Standing.app/Contents/Resources/StandingPayload/python/bin/python3.12"
+            EMBED_PY="$PAYLOAD/python/bin/python3.12"
           fi
           test -x "$EMBED_PY"
           (
-            cd native/Standing/Standing.app/Contents/Resources/StandingPayload
+            cd "$PAYLOAD"
             "$EMBED_PY" -c "import keyring, cv2, dotenv; print('embedded python ok')"
           )
 
