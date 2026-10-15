@@ -67,6 +67,20 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" "$APP/Contents/Framewor
 cp "$BIN_DIR/Standing" "$APP/Contents/MacOS/Standing"
 chmod +x "$APP/Contents/MacOS/Standing"
 
+# App icon (notifications, Finder, Dock) — built from the web brand mark.
+ICON_SRC="$ROOT/web/icons/icon-512.png"
+ICON_ICNS="$APP/Contents/Resources/AppIcon.icns"
+if [[ -f "$ICON_SRC" ]]; then
+  echo "Building AppIcon.icns…" >&2
+  if sips -s format icns "$ICON_SRC" --out "$ICON_ICNS" >/dev/null; then
+    echo "App icon: $ICON_ICNS" >&2
+  else
+    echo "Warning: could not build AppIcon.icns — notifications will show the placeholder icon." >&2
+  fi
+else
+  echo "Warning: missing $ICON_SRC — packaging without AppIcon.icns." >&2
+fi
+
 # Embed Sparkle.framework from the SwiftPM build.
 SPARKLE_FW=""
 for candidate in \
@@ -169,6 +183,8 @@ cat > "$APP/Contents/Info.plist" <<EOF
 	<string>6.0</string>
 	<key>CFBundleName</key>
 	<string>Standing</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>

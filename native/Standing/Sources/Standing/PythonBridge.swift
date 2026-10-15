@@ -94,7 +94,8 @@ final class PythonBridge: ObservableObject {
         stdout.fileHandleForReading.readabilityHandler = { [weak self] handle in
             let data = handle.availableData
             guard !data.isEmpty else { return }
-            Task { @MainActor in
+            // Capture immutable copy — weak `self` is a var and can't cross concurrency boundaries.
+            Task { @MainActor [self] in
                 self?.consumeStdout(data)
             }
         }
@@ -105,7 +106,7 @@ final class PythonBridge: ObservableObject {
             }
         }
         process.terminationHandler = { [weak self] proc in
-            Task { @MainActor in
+            Task { @MainActor [self] in
                 self?.workerReady = false
                 if proc.terminationStatus != 0 {
                     self?.workerError = "Worker exited (\(proc.terminationStatus))"

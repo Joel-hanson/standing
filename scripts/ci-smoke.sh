@@ -48,7 +48,7 @@ echo "  app ok: $APP"
 
 echo "==> Wrap DMG (from existing app)"
 export STANDING_DMG_PATH="${STANDING_DMG_PATH:-$ROOT/dist/Standing-ci.dmg}"
-DMG="$("$ROOT/scripts/package-dmg.sh" --skip-build)"
+DMG="$("$ROOT/scripts/package-dmg.sh" --skip-build | tail -n1)"
 test -f "$DMG"
 # Mount read-only and confirm Standing.app is inside.
 ATTACH_OUT="$(hdiutil attach -nobrowse -readonly "$DMG")"

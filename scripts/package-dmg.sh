@@ -35,7 +35,8 @@ DMG_PATH="${STANDING_DMG_PATH:-$DIST/Standing-${APP_VERSION}.dmg}"
 STAGE="$DIST/dmg-stage"
 
 if [[ "$SKIP_BUILD" -eq 0 ]]; then
-  "$ROOT/scripts/package-app.sh" --release
+  # package-app prints the .app path on stdout — keep our stdout clean for callers.
+  "$ROOT/scripts/package-app.sh" --release >/dev/null
 fi
 
 if [[ ! -d "$APP" ]]; then
@@ -49,14 +50,15 @@ mkdir -p "$STAGE"
 cp -R "$APP" "$STAGE/Standing.app"
 ln -s /Applications "$STAGE/Applications"
 
-echo "Creating $DMG_PATH…" >&2
+echo "Creating ${DMG_PATH}..." >&2
+# hdiutil also prints to stdout; redirect so only the DMG path is emitted below.
 hdiutil create \
   -volname "Standing" \
   -srcfolder "$STAGE" \
   -ov \
   -format UDZO \
-  "$DMG_PATH"
+  "$DMG_PATH" >&2
 
 rm -rf "$STAGE"
-echo "DMG ready: $DMG_PATH" >&2
+echo "DMG ready: ${DMG_PATH}" >&2
 echo "$DMG_PATH"
