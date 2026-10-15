@@ -40,8 +40,8 @@ struct ActivityHistoryChart: View {
         days.contains { $0.standingSeconds >= 1 || $0.sittingSeconds >= 1 }
     }
 
-    private let standColor = Color(red: 0.18, green: 0.55, blue: 0.42)
-    private let sitColor = Color(red: 0.45, green: 0.52, blue: 0.58)
+    private let standColor = StandingTheme.standing
+    private let sitColor = StandingTheme.sitting
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -56,7 +56,7 @@ struct ActivityHistoryChart: View {
                     if point.kind == "Standing", point.standUps > 0 {
                         Text("\(point.standUps)")
                             .font(.system(size: 9, weight: .semibold, design: .rounded))
-                            .foregroundStyle(Color.secondary)
+                            .foregroundStyle(StandingTheme.muted)
                     }
                 }
             }
@@ -88,12 +88,12 @@ struct ActivityHistoryChart: View {
 
             Text("Numbers above bars are stand-ups that day.")
                 .font(.caption2)
-                .foregroundStyle(Color.secondary)
+                .foregroundStyle(StandingTheme.muted)
 
             if !hasAnyMinutes {
                 Text("Track for a bit — the chart fills as days accumulate.")
                     .font(.caption)
-                    .foregroundStyle(Color.secondary)
+                    .foregroundStyle(StandingTheme.muted)
             }
         }
     }

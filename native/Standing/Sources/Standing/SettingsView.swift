@@ -8,15 +8,15 @@ struct SettingsView: View {
         Form {
             Section("Support") {
                 Text("Standing is free. One-time support helps keep it going.")
-                    .foregroundStyle(Color.secondary)
+                    .foregroundStyle(.secondary)
                     .font(.callout)
-                Link("Support Standing… ($5)", destination: SupportLinks.oneTimeURL)
+                Link("Support Standing…", destination: SupportLinks.oneTimeURL)
             }
 
             Section("Account") {
                 LabeledContent("AI API key") {
                     Text(bridge.state.hasApiKey ? "Saved in Keychain" : "Not set")
-                        .foregroundStyle(bridge.state.hasApiKey ? Color.secondary : Color.orange)
+                        .foregroundStyle(.secondary)
                 }
                 SecureField(
                     bridge.state.hasApiKey ? "Paste new key to replace" : "Paste TypeSafe AI API key",
@@ -24,9 +24,21 @@ struct SettingsView: View {
                 )
                 HStack {
                     Button("Save AI key") { bridge.saveApiKey() }
-                        .disabled(bridge.apiKeyDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        .disabled(
+                            bridge.apiKeyDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                                || !bridge.workerReady
+                        )
                     Button("Clear key", role: .destructive) { bridge.clearApiKey() }
-                        .disabled(!bridge.state.hasApiKey)
+                        .disabled(!bridge.state.hasApiKey || !bridge.workerReady)
+                }
+                if let status = bridge.apiKeyStatus {
+                    Text(status)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else if !bridge.workerReady {
+                    Text("Waiting for AI helper before saving…")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
                 Link("Get a TypeSafe API key…", destination: URL(string: "https://console.typesafe.ai")!)
                     .font(.caption)
@@ -44,7 +56,7 @@ struct SettingsView: View {
                             .labelsHidden()
                             .frame(width: 44)
                             .onSubmit { bridge.applyThresholds() }
-                        Text("min").foregroundStyle(Color.secondary)
+                        Text("min").foregroundStyle(.secondary)
                     }
                 }
                 LabeledContent("Remind after standing") {
@@ -54,7 +66,7 @@ struct SettingsView: View {
                             .labelsHidden()
                             .frame(width: 44)
                             .onSubmit { bridge.applyThresholds() }
-                        Text("min").foregroundStyle(Color.secondary)
+                        Text("min").foregroundStyle(.secondary)
                     }
                 }
             }
@@ -62,7 +74,7 @@ struct SettingsView: View {
 
             Section("Calibration") {
                 Text(bridge.state.calibrationLabel.replacingOccurrences(of: "Calibration: ", with: ""))
-                    .foregroundStyle(Color.secondary)
+                    .foregroundStyle(.secondary)
                 HStack {
                     Button("Calibrate sitting") { bridge.calibrateSitting() }
                     Button("Calibrate standing") { bridge.calibrateStanding() }
@@ -73,10 +85,10 @@ struct SettingsView: View {
             Section("Worker") {
                 LabeledContent("Status") {
                     Text(bridge.workerReady ? "Connected" : "Starting…")
-                        .foregroundStyle(bridge.workerReady ? Color.green : Color.secondary)
+                        .foregroundStyle(.secondary)
                 }
                 if let err = bridge.workerError {
-                    Text(err).foregroundStyle(Color.red)
+                    Text(err).foregroundStyle(StandingTheme.primary)
                 }
                 Button("Open log") { bridge.openLog() }
             }
@@ -84,20 +96,22 @@ struct SettingsView: View {
             Section("Updates") {
                 LabeledContent("Version") {
                     Text(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "—")
-                        .foregroundStyle(Color.secondary)
+                        .foregroundStyle(.secondary)
                 }
                 if updater.isConfigured {
                     Button("Check for Updates…") { updater.checkForUpdates() }
                 } else {
                     Text("Auto-updates activate after the app is packaged with a Sparkle feed URL.")
                         .font(.caption)
-                        .foregroundStyle(Color.secondary)
+                        .foregroundStyle(.secondary)
                 }
             }
         }
         .formStyle(.grouped)
+        .buttonStyle(.bordered)
         // Keep a compact preference-pane width — Form otherwise stretches too wide.
         .frame(width: 400)
         .padding(.vertical, 8)
+        .standingChrome()
     }
 }

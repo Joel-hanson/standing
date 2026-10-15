@@ -430,6 +430,64 @@
         font-size: 0.88rem;
       }
 
+      /* Quiet help note — below product story, not a setup funnel */
+      .install {
+        margin: 2.5rem auto 2rem;
+        padding: 1.15rem 1.25rem 1.25rem;
+        border-top: 1px solid var(--line);
+        text-align: left;
+        max-width: 520px;
+      }
+
+      .install h2 {
+        font-size: 0.95rem;
+        font-weight: 560;
+        letter-spacing: -0.01em;
+        color: var(--text-secondary);
+        margin-bottom: 0.35rem;
+      }
+
+      .install-lede {
+        color: var(--muted);
+        font-size: 0.85rem;
+        line-height: 1.5;
+        margin-bottom: 0.85rem;
+      }
+
+      .install-steps {
+        list-style: none;
+        display: grid;
+        gap: 0.55rem;
+        color: var(--muted);
+        font-size: 0.85rem;
+        line-height: 1.45;
+      }
+
+      .install-steps li {
+        padding-left: 1.1rem;
+        position: relative;
+      }
+
+      .install-steps li::before {
+        content: "·";
+        position: absolute;
+        left: 0;
+        color: var(--muted);
+      }
+
+      .install-steps strong {
+        font-weight: 560;
+        color: var(--text-secondary);
+      }
+
+      .install-note {
+        margin-top: 0.75rem;
+        color: var(--muted);
+        font-size: 0.8rem;
+        line-height: 1.45;
+        opacity: 0.9;
+      }
+
       .why h2 {
         font-size: 1.75rem;
         font-weight: 650;
@@ -530,7 +588,7 @@
         <div class="nav-links">
           <a href="#download">Download</a>
           <a href="#how">How</a>
-          <a href="https://gumroad.com/l/standing" target="_blank" rel="noopener noreferrer">Support</a>
+          <a href="https://buymeacoffee.com/joelhanson" target="_blank" rel="noopener noreferrer">Support</a>
         </div>
       </nav>
 
@@ -549,8 +607,9 @@
             Download for Mac
           </a>
         </div>
-        <p class="meta">Free forever · Optional <a id="support" href="https://gumroad.com/l/standing">$5 support</a></p>
+        <p class="meta">Free forever · Optional <a id="support" href="https://buymeacoffee.com/joelhanson" target="_blank" rel="noopener noreferrer">support</a></p>
         <p class="hero-secondary">
+          <a href="#open">If Mac blocks first open</a>
           <a href="https://github.com/Joel-hanson/standing">View on GitHub</a>
         </p>
       </header>
@@ -799,12 +858,38 @@
         </ul>
       </section>
 
+      <section class="install content" id="open" aria-labelledby="open-title">
+        <h2 id="open-title">If Mac won’t open it the first time</h2>
+        <p class="install-lede">
+          Apple may show an unverified-developer warning — Standing isn’t notarized yet.
+          One-time only; after that it opens normally.
+        </p>
+        <ul class="install-steps">
+          <li>
+            Drag Standing from the DMG into <strong>Applications</strong>.
+          </li>
+          <li>
+            Control-click Standing → <strong>Open</strong>, then confirm
+            <strong>Open</strong> again (a normal double-click won’t unlock it once).
+          </li>
+          <li>
+            Or in <strong>System Settings → Privacy &amp; Security</strong>, choose
+            <strong>Open Anyway</strong> next to the Standing message.
+          </li>
+        </ul>
+        <p class="install-note">
+          Camera and notification prompts are separate — allow those when macOS asks.
+        </p>
+      </section>
+
       <footer class="content">
         <p>Standing · desk posture for Mac · a <a href="https://joelhanson.com">Joel Hanson</a> project</p>
         <p>
           <a href="#download">Download</a>
           ·
-          <a href="https://gumroad.com/l/standing" target="_blank" rel="noopener noreferrer">Support — $5</a>
+          <a href="#open">First-open tip</a>
+          ·
+          <a href="https://buymeacoffee.com/joelhanson" target="_blank" rel="noopener noreferrer">Support</a>
           ·
           <a href="#how">How</a>
           ·

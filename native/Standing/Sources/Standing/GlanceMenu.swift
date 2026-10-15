@@ -60,7 +60,7 @@ struct GlanceMenu: View {
             }
         }
 
-        Link("Support Standing… ($5)", destination: SupportLinks.oneTimeURL)
+        Link("Support Standing…", destination: SupportLinks.oneTimeURL)
 
         Button("Quit Standing") {
             bridge.quitApp()

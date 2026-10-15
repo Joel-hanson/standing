@@ -32,6 +32,7 @@ struct StandingApp: App {
         Window("Activity", id: "activity") {
             ActivityView()
                 .environmentObject(bridge)
+                .standingChrome()
         }
         .defaultSize(width: 440, height: 560)
 
@@ -41,6 +42,7 @@ struct StandingApp: App {
                 .environmentObject(updater)
                 // Pin the system Settings window to a compact preference width.
                 .frame(width: 400)
+                .standingChrome()
         }
     }
 

@@ -5,18 +5,14 @@ from __future__ import annotations
 import os
 import webbrowser
 
-# Replace with your Gumroad / Lemon Squeezy product URL when live.
-# Override anytime with STANDING_SUPPORT_URL in the environment.
-DEFAULT_SUPPORT_URL = "https://gumroad.com/l/standing"
-SUPPORT_PRICE_LABEL = "$5"
-
-
+# Buy Me a Coffee page. Override anytime with STANDING_SUPPORT_URL.
+DEFAULT_SUPPORT_URL = "https://buymeacoffee.com/joelhanson"
 def support_url() -> str:
     return (os.environ.get("STANDING_SUPPORT_URL") or "").strip() or DEFAULT_SUPPORT_URL
 
 
 def support_menu_title() -> str:
-    return f"Support Standing… ({SUPPORT_PRICE_LABEL})"
+    return "Support Standing…"
 
 
 def open_support() -> None:

@@ -1,19 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 36 36" role="img" aria-label="Standing">
   <rect width="36" height="36" rx="8" fill="#0a0a0a"/>
-  <!-- Standing figure — same cue as the menu-bar figure.stand state -->
-  <g fill="#2e8c6b">
-    <!-- head -->
-    <circle cx="18" cy="8.25" r="3.35"/>
-    <!-- torso -->
-    <rect x="14.4" y="12.2" width="7.2" height="9.2" rx="2.4"/>
-    <!-- left arm -->
-    <rect x="9.6" y="13.1" width="3.4" height="8.2" rx="1.7" transform="rotate(18 11.3 17.2)"/>
-    <!-- right arm -->
-    <rect x="23" y="13.1" width="3.4" height="8.2" rx="1.7" transform="rotate(-18 24.7 17.2)"/>
-    <!-- left leg -->
-    <rect x="13.5" y="20.8" width="3.5" height="9.4" rx="1.75"/>
-    <!-- right leg -->
-    <rect x="19" y="20.8" width="3.5" height="9.4" rx="1.75"/>
+  <!-- Standing i in brand crimson (site primary) -->
+  <g fill="#dc143c">
+    <circle cx="18" cy="9.5" r="3.6"/>
+    <rect x="15.15" y="14.4" width="5.7" height="15.2" rx="2.85"/>
   </g>
 </svg>

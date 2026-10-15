@@ -8,6 +8,7 @@ final class PythonBridge: ObservableObject {
     @Published private(set) var state = StandingState.empty
     @Published private(set) var workerReady = false
     @Published private(set) var workerError: String?
+    @Published private(set) var apiKeyStatus: String?
     @Published var sitWarnText = "30"
     @Published var standWarnText = "45"
     @Published var apiKeyDraft = ""
@@ -18,6 +19,7 @@ final class PythonBridge: ObservableObject {
     private var stderrPipe: Pipe?
     private var readBuffer = Data()
     private var nextId = 1
+    private var pendingSaveId: Int?
     private let repoRoot: URL
 
     init() {
@@ -45,8 +47,16 @@ final class PythonBridge: ObservableObject {
     func saveApiKey() {
         let key = apiKeyDraft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !key.isEmpty else { return }
-        send(cmd: "save_api_key", ["key": key])
-        apiKeyDraft = ""
+        guard workerIsAlive else {
+            workerError = "AI helper is not running. Quit Standing from the menu bar and reopen it, then try again."
+            apiKeyStatus = nil
+            return
+        }
+        apiKeyStatus = "Saving…"
+        let id = nextId
+        nextId += 1
+        pendingSaveId = id
+        send(cmd: "save_api_key", ["key": key], id: id)
     }
 
     func clearApiKey() { send(cmd: "clear_api_key") }
@@ -76,6 +86,10 @@ final class PythonBridge: ObservableObject {
 
     private func startWorker() {
         let python = Self.resolvePython(repoRoot: repoRoot)
+        if python.path == "/usr/bin/python3", Self.runningInsideAppBundle {
+            workerError =
+                "Bundled Python is missing. Reinstall Standing from a fresh DMG (or run a dev build)."
+        }
         let process = Process()
         process.executableURL = python
         process.arguments = ["-m", "src.worker"]
@@ -108,8 +122,13 @@ final class PythonBridge: ObservableObject {
         process.terminationHandler = { [weak self] proc in
             Task { @MainActor [self] in
                 self?.workerReady = false
+                if self?.pendingSaveId != nil {
+                    self?.pendingSaveId = nil
+                    self?.apiKeyStatus = nil
+                }
                 if proc.terminationStatus != 0 {
-                    self?.workerError = "Worker exited (\(proc.terminationStatus))"
+                    self?.workerError =
+                        "AI helper quit unexpectedly (\(proc.terminationStatus)). Open Settings → Open log, or reinstall Standing."
                 }
             }
         }
@@ -126,16 +145,43 @@ final class PythonBridge: ObservableObject {
         }
     }
 
-    private func send(cmd: String, _ extra: [String: Any] = [:]) {
-        var payload: [String: Any] = ["cmd": cmd, "id": nextId]
-        nextId += 1
+    private var workerIsAlive: Bool {
+        workerReady && process?.isRunning == true
+    }
+
+    private func send(cmd: String, _ extra: [String: Any] = [:], id: Int? = nil) {
+        let reqId: Int
+        if let id {
+            reqId = id
+        } else {
+            reqId = nextId
+            nextId += 1
+        }
+
+        var payload: [String: Any] = ["cmd": cmd, "id": reqId]
         for (k, v) in extra { payload[k] = v }
         guard
             let data = try? JSONSerialization.data(withJSONObject: payload),
             var line = String(data: data, encoding: .utf8)
         else { return }
         line.append("\n")
-        stdinPipe?.fileHandleForWriting.write(Data(line.utf8))
+
+        guard process?.isRunning == true, let handle = stdinPipe?.fileHandleForWriting else {
+            workerReady = false
+            workerError = "AI helper is not running — quit and reopen Standing."
+            return
+        }
+        // Avoid FileHandle.write crashing the app on a broken pipe when the worker died.
+        do {
+            try handle.write(contentsOf: Data(line.utf8))
+        } catch {
+            workerReady = false
+            workerError = "Lost connection to AI helper. Quit and reopen Standing."
+            if pendingSaveId != nil {
+                pendingSaveId = nil
+                apiKeyStatus = nil
+            }
+        }
     }
 
     private func consumeStdout(_ data: Data) {
@@ -177,9 +223,25 @@ final class PythonBridge: ObservableObject {
         case "error":
             workerError = obj["message"] as? String
         case "ack":
-            break
+            handleAck(obj)
         default:
             break
+        }
+    }
+
+    private func handleAck(_ obj: [String: Any]) {
+        let ackId = obj["id"] as? Int ?? Int(obj["id"] as? Double ?? -1)
+        guard ackId == pendingSaveId else { return }
+        pendingSaveId = nil
+        let ok = obj["ok"] as? Bool ?? false
+        if ok {
+            apiKeyDraft = ""
+            apiKeyStatus = "Saved in Keychain"
+            workerError = nil
+        } else {
+            let err = obj["error"] as? String ?? "Could not save key"
+            apiKeyStatus = nil
+            workerError = err
         }
     }
 
@@ -257,10 +319,31 @@ final class PythonBridge: ObservableObject {
         if let env = ProcessInfo.processInfo.environment["STANDING_PYTHON"], !env.isEmpty {
             return URL(fileURLWithPath: env)
         }
-        let venv = repoRoot.appendingPathComponent(".venv/bin/python3")
-        if FileManager.default.isExecutableFile(atPath: venv.path) {
-            return venv
+        // Prefer a real executable (broken venv symlinks must not win).
+        let candidates = [
+            repoRoot.appendingPathComponent(".venv/bin/python3"),
+            repoRoot.appendingPathComponent("python/bin/python3"),
+            repoRoot.appendingPathComponent("python/bin/python3.12"),
+        ]
+        for url in candidates {
+            if let resolved = usablePython(at: url) {
+                return resolved
+            }
         }
         return URL(fileURLWithPath: "/usr/bin/python3")
+    }
+
+    /// Returns a resolvable python path, or nil if missing / dangling symlink.
+    private static func usablePython(at url: URL) -> URL? {
+        let path = url.path
+        var isDir: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: path, isDirectory: &isDir), !isDir.boolValue else {
+            return nil
+        }
+        let resolved = url.resolvingSymlinksInPath()
+        guard FileManager.default.isExecutableFile(atPath: resolved.path) else {
+            return nil
+        }
+        return resolved
     }
 }

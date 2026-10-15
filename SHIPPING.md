@@ -52,9 +52,14 @@ export STANDING_APP_BUILD=2
 ./scripts/package-dmg.sh   # → dist/Standing-0.2.0.dmg
 ```
 
-`package-app.sh --release` embeds `src/` + a fresh `.venv` under
-`Standing.app/Contents/Resources/StandingPayload/` (never `.env` or local data).
-Dev builds (`./scripts/run-native.sh`) still point at the repo `.venv`.
+`package-app.sh --release` embeds worker `src/` plus a **relocatable** CPython
+(via `uv python` / python-build-standalone) under
+`Standing.app/Contents/Resources/StandingPayload/python/`, installing
+`requirements-release.txt` (no rumps/PyObjC) and stripping tests/pip/unused
+stdlib (never `.env` or local data). Do not ship a host `.venv` — those
+symlinks break on other Macs and the Swift shell then falls back to system
+Python, so Save AI key fails. Dev builds (`./scripts/run-native.sh`) still
+point at the repo `.venv` + full `requirements.txt`.
 
 Manual Apple steps (or let CI do them — see below):
 1. Apple Developer ID certificate
@@ -140,6 +145,6 @@ This repo already has: Keychain API key, suggestions + notifications, cost-aware
 ## Monetization (one-time Support)
 
 - **Everything is free** — tracking, history, nudges. No paywall, no license key.
-- Optional **one-time Support ($5)** via Gumroad (or similar): Settings, menu bar, and the landing page.
-- Set the live product URL in `src/support.py`, `SupportLinks.swift`, and `web/index.html` (Python shell can also use `STANDING_SUPPORT_URL`).
+- Optional **one-time Support** via [Buy Me a Coffee](https://buymeacoffee.com/joelhanson): Settings, menu bar, and the landing page.
+- URL lives in `src/support.py`, `SupportLinks.swift`, and `web/index.html` (Python shell can also use `STANDING_SUPPORT_URL`).
 - Move to subscriptions only if you later host recurring COGS (proxied Jev, cloud sync, etc.).
