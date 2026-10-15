@@ -1,0 +1,7 @@
+typesafe-sdk[pil]>=0.7.5
+opencv-python-headless>=4.8.0
+Pillow>=10.0.0
+python-dotenv>=1.0.0
+numpy>=1.26.0
+rumps>=0.4.0
+keyring>=25.0.0
