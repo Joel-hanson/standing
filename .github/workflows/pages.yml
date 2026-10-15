@@ -1,0 +1,60 @@
+# Sync web/ → Joel-hanson/joel-hanson.github.io/static/standing
+# (private repos can't use GitHub Pages on the free plan; the personal site
+# already owns joelhanson.com, so /standing is published from there.)
+#
+# One-time: add repo secret SITE_DEPLOY_TOKEN — a fine-grained PAT with
+# Contents: Read and write on Joel-hanson/joel-hanson.github.io
+
+name: Deploy site
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "web/**"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-site
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Standing
+        uses: actions/checkout@v4
+
+      - name: Checkout personal site
+        uses: actions/checkout@v4
+        with:
+          repository: Joel-hanson/joel-hanson.github.io
+          token: ${{ secrets.SITE_DEPLOY_TOKEN }}
+          path: site
+
+      - name: Sync web → static/standing
+        run: |
+          set -euo pipefail
+          rm -rf site/static/standing
+          mkdir -p site/static/standing
+          rsync -a --delete \
+            --exclude '.DS_Store' \
+            web/ site/static/standing/
+
+      - name: Commit and push
+        working-directory: site
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add static/standing
+          if git diff --staged --quiet; then
+            echo "No site changes."
+            exit 0
+          fi
+          git commit -m "Update Standing landing page from Joel-hanson/standing"
+          git push
