@@ -150,8 +150,6 @@ jobs:
               '  <true/>\n'
               '  <key>com.apple.security.cs.disable-library-validation</key>\n'
               '  <true/>\n'
-              '  <key>com.apple.developer.healthkit</key>\n'
-              '  <true/>\n'
               '</dict>\n'
               '</plist>\n'
           )

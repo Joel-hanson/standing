@@ -32,7 +32,7 @@ PY
 echo "==> Package Standing.app (dev)"
 export STANDING_APP_VERSION="${STANDING_APP_VERSION:-0.0.0-ci}"
 export STANDING_APP_BUILD="${STANDING_APP_BUILD:-0}"
-APP="$("$ROOT/scripts/package-app.sh")"
+APP="$("$ROOT/scripts/package-app.sh" | tail -n1)"
 
 echo "==> Verify app bundle"
 test -x "$APP/Contents/MacOS/Standing"

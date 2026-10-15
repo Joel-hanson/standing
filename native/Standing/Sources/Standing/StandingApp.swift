@@ -20,11 +20,12 @@ struct StandingApp: App {
                     offerOnboardingIfNeeded(ready: bridge.workerReady)
                 }
         } label: {
-            Label {
-                Text(bridge.state.barTitle)
-            } icon: {
-                Image(systemName: bridge.state.barSymbol)
-            }
+            MenuBarStatusLabel(
+                title: bridge.state.barTitle,
+                systemImage: bridge.state.barSymbol
+            )
+            // Force MenuBarExtra to refresh when posture / streak changes.
+            .id("\(bridge.state.barSymbol)|\(bridge.state.barTitle)")
         }
         .menuBarExtraStyle(.menu)
 
@@ -37,7 +38,6 @@ struct StandingApp: App {
         Settings {
             SettingsView()
                 .environmentObject(bridge)
-                .environmentObject(bridge.healthKit)
                 .environmentObject(updater)
                 // Pin the system Settings window to a compact preference width.
                 .frame(width: 400)

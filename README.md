@@ -111,7 +111,6 @@ Requires Xcode / Swift 5.9+ (macOS 14+). Packages a real `.app`:
 | Settings | API key, calibration, sit/stand thresholds, Support |
 | Activity (B) | 7-day stand/sit chart, recent days, usage |
 | Nudges | Notifications after ~30 min sitting or ~45 min standing |
-| Apple Health (B) | Optional — log 10+ min standing bouts as Workouts (Settings, off by default) |
 | Cost controls | Motion gate, scene+pose cache, heartbeat (~180s), cooldown (~15s), ~360px images |
 | Support | Optional one-time **$5** — app stays free (no feature locks) |
 

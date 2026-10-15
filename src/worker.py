@@ -2,7 +2,7 @@
 
 Protocol (one JSON object per line):
   Swift → Python (stdin):  {"cmd":"...", "id":1, ...}
-  Python → Swift (stdout): {"event":"state"|"notify"|"standing_bout_ended"|"ready"|"ack"|"error", ...}
+  Python → Swift (stdout): {"event":"state"|"notify"|"ready"|"ack"|"error", ...}
 
 Logs always go to stderr / log file — never stdout.
 """
@@ -48,14 +48,6 @@ class WorkerBridge:
     def on_notify(self, title: str, message: str) -> None:
         self.emit({"event": "notify", "title": title, "message": message})
 
-    def on_standing_bout(self, elapsed_seconds: float) -> None:
-        self.emit(
-            {
-                "event": "standing_bout_ended",
-                "elapsed_seconds": float(elapsed_seconds),
-            }
-        )
-
     def handle(self, msg: dict[str, Any]) -> None:
         cmd = msg.get("cmd")
         req_id = msg.get("id")
@@ -93,10 +85,6 @@ class WorkerBridge:
                 result = self.core.clear_calibration()
             elif cmd == "open_log":
                 result = self.core.open_log()
-            elif cmd == "connect_strava":
-                result = self.core.connect_strava()
-            elif cmd == "disconnect_strava":
-                result = self.core.disconnect_strava()
             elif cmd == "shutdown":
                 result = {"ok": True}
                 self.emit({"event": "ack", "id": req_id, **result})
@@ -136,17 +124,7 @@ def run_worker(argv: list[str] | None = None) -> int:
         if bridge:
             bridge.on_notify(title, message)
 
-    def on_standing_bout(elapsed_seconds: float) -> None:
-        if bridge:
-            bridge.on_standing_bout(elapsed_seconds)
-
-    core = StandingCore(
-        args,
-        log_path,
-        on_state=on_state,
-        on_notify=on_notify,
-        on_standing_bout=on_standing_bout,
-    )
+    core = StandingCore(args, log_path, on_state=on_state, on_notify=on_notify)
     bridge = WorkerBridge(core, sys.stdout)
     core.start_pulse(0.5)
 

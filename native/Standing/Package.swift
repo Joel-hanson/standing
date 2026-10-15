@@ -18,10 +18,7 @@ let package = Package(
             dependencies: [
                 .product(name: "Sparkle", package: "Sparkle"),
             ],
-            path: "Sources/Standing",
-            linkerSettings: [
-                .linkedFramework("HealthKit"),
-            ]
+            path: "Sources/Standing"
         ),
     ]
 )

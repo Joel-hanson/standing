@@ -44,8 +44,6 @@ class App:
             on_calibrate_standing=lambda: self.core.calibrate("standing"),
             on_clear_calibration=self.core.clear_calibration,
             on_open_log=self.core.open_log,
-            on_connect_strava=self.core.connect_strava,
-            on_disconnect_strava=self.core.disconnect_strava,
         )
         self.core.set_callbacks(on_state=self._on_state, on_notify=self.ui.notify)
 
@@ -62,9 +60,6 @@ class App:
             history_label=state.history_label,
             sit_warn_minutes=state.sit_warn_minutes,
             stand_warn_minutes=state.stand_warn_minutes,
-            strava_connected=state.strava_connected,
-            strava_configured=state.strava_configured,
-            strava_label=state.strava_label,
         )
 
     def _on_state(self, _state: dict) -> None:

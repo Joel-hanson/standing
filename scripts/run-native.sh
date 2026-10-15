@@ -6,7 +6,8 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
-APP="$("$ROOT/scripts/package-app.sh")"
+# package-app.sh prints progress on stderr; last stdout line is the .app path.
+APP="$("$ROOT/scripts/package-app.sh" | tail -n1)"
 
 # Drop any previous instance so the menu-bar icon refreshes cleanly.
 pkill -x Standing 2>/dev/null || true

@@ -40,9 +40,6 @@ class SettingsSnapshot:
     history_label: str
     sit_warn_minutes: float
     stand_warn_minutes: float
-    strava_connected: bool = False
-    strava_configured: bool = False
-    strava_label: str = "Not connected"
 
 
 def _label(text: str, *, bold: bool = False, secondary: bool = False) -> NSTextField:
@@ -89,9 +86,6 @@ class _SettingsController(NSObject):
         self._sit_field: NSTextField | None = None
         self._stand_field: NSTextField | None = None
         self._save_btn: NSButton | None = None
-        self._status_strava: NSTextField | None = None
-        self._strava_connect_btn: NSButton | None = None
-        self._strava_disconnect_btn: NSButton | None = None
         return self
 
     def show_(self, snap: SettingsSnapshot) -> None:  # noqa: N802
@@ -126,17 +120,6 @@ class _SettingsController(NSObject):
             self._sit_field.setStringValue_(str(int(snap.sit_warn_minutes)))
         if self._stand_field is not None:
             self._stand_field.setStringValue_(str(int(snap.stand_warn_minutes)))
-        if self._status_strava is not None:
-            self._status_strava.setStringValue_(snap.strava_label)
-        if self._strava_connect_btn is not None:
-            self._strava_connect_btn.setEnabled_(
-                snap.strava_configured and not snap.strava_connected
-            )
-            self._strava_connect_btn.setTitle_(
-                "Connect Strava" if snap.strava_configured else "Strava not configured"
-            )
-        if self._strava_disconnect_btn is not None:
-            self._strava_disconnect_btn.setEnabled_(snap.strava_connected)
         self._sync_save_enabled()
 
     def _sync_save_enabled(self) -> None:
@@ -150,11 +133,8 @@ class _SettingsController(NSObject):
 
     def _build(self) -> None:
         # Compact preference pane — fixed width so rows don’t stretch.
-        from src.strava import feature_enabled as strava_ui_enabled
-
-        show_strava = strava_ui_enabled()
         # Base layout + Support section (~90px with title).
-        width, height = 400, (736 if show_strava else 646) + 90
+        width, height = 400, 646 + 90
         margin = 18
         inner = width - margin * 2
         pad = 12
@@ -252,26 +232,6 @@ class _SettingsController(NSObject):
         )
 
         y -= 12
-
-        # ── Strava (opt-in via STRAVA_UI=1) ───────────────────────
-        if show_strava:
-            section_title("Strava")
-            strava_h = 72
-            y -= strava_h
-            strava = _group_box(NSMakeRect(margin, y, inner, strava_h))
-            content.addSubview_(strava)
-
-            self._status_strava = _label("…", secondary=True)
-            self._status_strava.setFrame_(NSMakeRect(pad, strava_h - 26, inner - pad * 2, 15))
-            strava.addSubview_(self._status_strava)
-
-            self._strava_connect_btn = push_button(
-                "Connect Strava", "connectStrava:", x=pad, w=128, parent=strava, by=10
-            )
-            self._strava_disconnect_btn = push_button(
-                "Disconnect", "disconnectStrava:", x=pad + 136, w=100, parent=strava, by=10
-            )
-            y -= 12
 
         # ── Standing nudges ──────────────────────────────────────
         section_title("Standing nudges")
@@ -385,19 +345,6 @@ class _SettingsController(NSObject):
     def openSupport_(self, _sender) -> None:  # noqa: N802
         open_support()
 
-    def connectStrava_(self, _sender) -> None:  # noqa: N802
-        cb = self._callbacks.get("connect_strava")
-        if cb:
-            # OAuth blocks on the localhost callback — keep UI responsive via thread.
-            import threading
-
-            threading.Thread(target=cb, name="strava-connect-ui", daemon=True).start()
-
-    def disconnectStrava_(self, _sender) -> None:  # noqa: N802
-        cb = self._callbacks.get("disconnect_strava")
-        if cb:
-            cb()
-
     def toggleSuggestions_(self, sender) -> None:  # noqa: N802
         cb = self._callbacks.get("toggle_suggestions")
         if cb:
@@ -454,8 +401,6 @@ class SettingsWindow:
         on_calibrate_standing: Callable[[], None],
         on_clear_calibration: Callable[[], None],
         on_open_log: Callable[[], None],
-        on_connect_strava: Callable[[], None] | None = None,
-        on_disconnect_strava: Callable[[], None] | None = None,
     ) -> None:
         self._controller = _SettingsController.alloc().initWithCallbacks_(
             {
@@ -467,8 +412,6 @@ class SettingsWindow:
                 "calibrate_standing": on_calibrate_standing,
                 "clear_calibration": on_clear_calibration,
                 "open_log": on_open_log,
-                "connect_strava": on_connect_strava,
-                "disconnect_strava": on_disconnect_strava,
             }
         )
 

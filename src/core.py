@@ -18,7 +18,6 @@ from src.logging_setup import get_logger
 from src.motion import MotionGate
 from src import paths as app_paths
 from src.scene_cache import ScenePoseCache, gray_from_jpeg
-from src import strava as strava_api
 from src.suggestions import SuggestionEngine
 from src.tracker import StandingTracker, format_duration
 
@@ -33,8 +32,6 @@ DEFAULT_LOG = app_paths.user_log_dir() / "standing.log"
 
 NotifyFn = Callable[[str, str], None]
 StateFn = Callable[[dict[str, Any]], None]
-# Elapsed standing seconds when a bout ends (confirmed sit/away or pause).
-StandingBoutFn = Callable[[float], None]
 
 
 def calibration_label(*, has_standing: bool, has_sitting: bool) -> str:
@@ -110,10 +107,6 @@ class StandingState:
     usage_label: str
     history: list[dict[str, Any]]
     history_label: str
-    strava_connected: bool
-    strava_configured: bool
-    strava_label: str
-    strava_ui_enabled: bool
 
     def as_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -129,14 +122,12 @@ class StandingCore:
         *,
         on_state: StateFn | None = None,
         on_notify: NotifyFn | None = None,
-        on_standing_bout: StandingBoutFn | None = None,
     ) -> None:
         self.args = args
         self.log = get_logger()
         self.log_path = log_path
         self._on_state = on_state
         self._on_notify = on_notify
-        self._on_standing_bout = on_standing_bout
         app_paths.ensure_dirs(repo_root=ROOT)
 
         api_key = get_api_key()
@@ -164,7 +155,6 @@ class StandingCore:
 
         self._last_api_at = 0.0
         self._pending_confirm_at: float | None = None
-        self._pending_strava_seconds: float | None = None
         self._force_next = False
         self._last_skip_log_at = 0.0
         self._camera_down = False
@@ -187,14 +177,11 @@ class StandingCore:
         *,
         on_state: StateFn | None = None,
         on_notify: NotifyFn | None = None,
-        on_standing_bout: StandingBoutFn | None = None,
     ) -> None:
         if on_state is not None:
             self._on_state = on_state
         if on_notify is not None:
             self._on_notify = on_notify
-        if on_standing_bout is not None:
-            self._on_standing_bout = on_standing_bout
 
     def notify(self, title: str, message: str) -> None:
         if self._on_notify:
@@ -268,15 +255,6 @@ class StandingCore:
             ),
             history=self.tracker.history_entries(),
             history_label=self.tracker.history_label(),
-            strava_connected=strava_api.feature_enabled() and strava_api.is_connected(),
-            strava_configured=strava_api.feature_enabled()
-            and strava_api.has_app_credentials(),
-            strava_label=(
-                strava_api.connection_label()
-                if strava_api.feature_enabled()
-                else "Hidden"
-            ),
-            strava_ui_enabled=strava_api.feature_enabled(),
         )
 
     def start_pulse(self, interval: float = 0.5) -> None:
@@ -303,7 +281,6 @@ class StandingCore:
 
     def set_tracking(self, enabled: bool) -> dict[str, Any]:
         need_key = False
-        ended_standing: float | None = None
         release_camera = False
         with self._lock:
             if enabled and not get_api_key():
@@ -312,18 +289,12 @@ class StandingCore:
                 self.publish_state()
             else:
                 if not enabled and self.tracker.tracking:
-                    if self.tracker.posture == "standing":
-                        ended_standing = self.tracker.standing_streak_seconds()
-                    elif self._pending_strava_seconds is not None:
-                        ended_standing = self._pending_strava_seconds
-                    self._pending_strava_seconds = None
                     release_camera = True
                 self.tracker.set_tracking(enabled)
                 if enabled:
                     self.log.info("Tracking started")
                     self._force_next = True
                     self._pending_confirm_at = None
-                    self._pending_strava_seconds = None
                     self.motion.reset()
                     self._ensure_loop()
                 else:
@@ -332,81 +303,10 @@ class StandingCore:
         if release_camera:
             self.camera.close()
             self.log.debug("Camera released while paused")
-        if ended_standing is not None:
-            self._standing_bout_ended(ended_standing)
         if need_key:
             self.notify("API key needed", "Open Settings… to add your TypeSafe key.")
             return {"ok": False, "error": "api_key_required"}
         return {"ok": True, "tracking": enabled}
-
-    def connect_strava(self) -> dict[str, Any]:
-        """Run browser OAuth (blocks until done or timeout). Prefer calling from a UI thread."""
-        if not strava_api.feature_enabled():
-            return {"ok": False, "error": "strava_hidden"}
-        try:
-            tokens = strava_api.authorize_interactive()
-            with self._lock:
-                self.publish_state()
-            name = tokens.athlete_name or "Strava"
-            self.log.info("Strava connected (%s)", name)
-            self.notify("Strava connected", f"Standing sessions will upload for {name}.")
-            return {"ok": True, "athlete": tokens.athlete_name}
-        except strava_api.StravaConfigError as exc:
-            self.log.warning("Strava config: %s", exc)
-            self.notify("Strava setup needed", str(exc)[:160])
-            return {"ok": False, "error": str(exc)}
-        except strava_api.StravaAuthError as exc:
-            self.log.warning("Strava auth failed: %s", exc)
-            self.notify("Strava connection failed", str(exc)[:120])
-            return {"ok": False, "error": str(exc)}
-        except Exception as exc:  # noqa: BLE001
-            self.log.exception("Strava connect failed")
-            self.notify("Strava connection failed", str(exc)[:120])
-            return {"ok": False, "error": str(exc)}
-
-    def disconnect_strava(self) -> dict[str, Any]:
-        strava_api.clear_tokens()
-        with self._lock:
-            self.publish_state()
-        self.log.info("Strava disconnected")
-        self.notify("Strava disconnected", "Tokens removed from Keychain.")
-        return {"ok": True}
-
-    def _standing_bout_ended(self, elapsed_seconds: float) -> None:
-        """Notify shells (HealthKit) and optional Strava after a standing bout ends."""
-        if self._on_standing_bout:
-            try:
-                self._on_standing_bout(elapsed_seconds)
-            except Exception:  # noqa: BLE001
-                self.log.exception("standing_bout callback failed")
-        self._maybe_push_strava(elapsed_seconds)
-
-    def _maybe_push_strava(self, elapsed_seconds: float) -> None:
-        if not strava_api.feature_enabled() or not strava_api.is_connected():
-            return
-        minimum = strava_api.min_standing_seconds()
-        if elapsed_seconds < minimum:
-            self.log.debug(
-                "Skip Strava upload (%.0fs < min %.0fs)",
-                elapsed_seconds,
-                minimum,
-            )
-            return
-        stand_ups = self.tracker.stats.stand_ups
-
-        def _upload() -> None:
-            try:
-                strava_api.create_standing_activity(
-                    elapsed_seconds=elapsed_seconds,
-                    stand_ups_note=stand_ups,
-                )
-                mins = int(elapsed_seconds // 60)
-                self.notify("Logged to Strava", f"Standing desk · {mins}m")
-            except Exception as exc:  # noqa: BLE001
-                self.log.exception("Strava upload failed")
-                self.notify("Strava upload failed", str(exc)[:120])
-
-        threading.Thread(target=_upload, name="strava-upload", daemon=True).start()
 
     def reset_day(self) -> dict[str, Any]:
         with self._lock:
@@ -750,13 +650,8 @@ class StandingCore:
                 self.publish_state()
             return
 
-        ended_standing: float | None = None
         with self._lock:
             self._last_api_at = time.monotonic()
-            if prev_posture == "standing" and result.posture != "standing":
-                self._pending_strava_seconds = self.tracker.standing_streak_seconds()
-            elif result.posture == "standing":
-                self._pending_strava_seconds = None
             self.tracker.set_posture_from_api(
                 result.posture,
                 input_tokens=result.input_tokens,
@@ -776,18 +671,9 @@ class StandingCore:
 
             if reason == "confirm":
                 self._pending_confirm_at = None
-                # Only upload after the flip is confirmed — avoids false sit detections.
-                if (
-                    result.posture != "standing"
-                    and self._pending_strava_seconds is not None
-                ):
-                    ended_standing = self._pending_strava_seconds
-                    self._pending_strava_seconds = None
             elif flipped and prev_posture != "unknown":
                 self._pending_confirm_at = time.monotonic() + self.args.confirm_seconds
                 self.log.debug("Scheduled confirm in %.1fs", self.args.confirm_seconds)
             else:
                 self._pending_confirm_at = None
             self.publish_state()
-        if ended_standing is not None:
-            self._standing_bout_ended(ended_standing)

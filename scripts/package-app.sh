@@ -47,10 +47,11 @@ SPARKLE_FEED_URL="${STANDING_SPARKLE_FEED_URL:-}"
 SPARKLE_PUBLIC_ED_KEY="${STANDING_SPARKLE_PUBLIC_ED_KEY:-}"
 
 echo "Building Standing (release, version $APP_VERSION build $APP_BUILD, mode=$MODE)…" >&2
+# Keep stdout clean: callers capture the final app path only.
 (
   cd "$NATIVE"
   swift build -c release
-)
+) >&2
 
 if [[ ! -x "$BIN_DIR/Standing" ]]; then
   BIN_DIR="$(echo "$NATIVE"/.build/*-apple-macosx/release)"
@@ -140,8 +141,8 @@ else
 
   echo "Creating embedded .venv (this can take a few minutes)…" >&2
   python3 -m venv "$PAYLOAD/.venv"
-  "$PAYLOAD/.venv/bin/pip" install --upgrade pip
-  "$PAYLOAD/.venv/bin/pip" install -r "$PAYLOAD/requirements.txt"
+  "$PAYLOAD/.venv/bin/pip" install --upgrade pip >&2
+  "$PAYLOAD/.venv/bin/pip" install -r "$PAYLOAD/requirements.txt" >&2
 
   LS_ENVIRONMENT=$(cat <<EOF
 	<key>LSEnvironment</key>
@@ -182,22 +183,18 @@ cat > "$APP/Contents/Info.plist" <<EOF
 	<true/>
 	<key>NSCameraUsageDescription</key>
 	<string>Standing uses the camera to check whether you are sitting or standing at your desk.</string>
-	<key>NSHealthShareUsageDescription</key>
-	<string>Standing does not read your Health data. macOS requires this description when optional Health logging is available in Settings.</string>
-	<key>NSHealthUpdateUsageDescription</key>
-	<string>Standing can optionally save completed standing-desk sessions as Workouts in Apple Health when you turn that on in Settings.</string>
 ${SPARKLE_PLIST_KEYS}
 ${LS_ENVIRONMENT}
 </dict>
 </plist>
 EOF
 
-# Ad-hoc sign so HealthKit + camera entitlements apply for local runs.
+# Ad-hoc sign for local runs (camera + hardened-runtime relaxations).
 ENTITLEMENTS="$NATIVE/Standing.entitlements"
 if [[ -f "$ENTITLEMENTS" ]]; then
-  echo "Ad-hoc codesign with HealthKit entitlements…" >&2
+  echo "Ad-hoc codesign…" >&2
   codesign --force --deep --sign - --entitlements "$ENTITLEMENTS" "$APP" 2>/dev/null \
-    || echo "Warning: codesign failed — HealthKit may be unavailable until signed." >&2
+    || echo "Warning: codesign failed — camera / embedded libs may be limited." >&2
 fi
 
 echo "Standing.app ready: $APP" >&2

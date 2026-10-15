@@ -12,8 +12,6 @@ final class PythonBridge: ObservableObject {
     @Published var standWarnText = "45"
     @Published var apiKeyDraft = ""
 
-    let healthKit = HealthKitLogger()
-
     private var process: Process?
     private var stdinPipe: Pipe?
     private var stdoutPipe: Pipe?
@@ -30,10 +28,6 @@ final class PythonBridge: ObservableObject {
             UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
         }
         startWorker()
-    }
-
-    func setHealthKitLogging(_ enabled: Bool) {
-        Task { await healthKit.setEnabled(enabled) }
     }
 
     deinit {
@@ -56,8 +50,6 @@ final class PythonBridge: ObservableObject {
     }
 
     func clearApiKey() { send(cmd: "clear_api_key") }
-    func connectStrava() { send(cmd: "connect_strava") }
-    func disconnectStrava() { send(cmd: "disconnect_strava") }
 
     func applyThresholds() {
         let sit = Double(sitWarnText) ?? state.sitWarnMinutes
@@ -181,10 +173,6 @@ final class PythonBridge: ObservableObject {
             let title = obj["title"] as? String ?? "Standing"
             let message = obj["message"] as? String ?? ""
             postNotification(title: title, message: message)
-        case "standing_bout_ended":
-            let seconds = obj["elapsed_seconds"] as? Double
-                ?? Double(obj["elapsed_seconds"] as? Int ?? 0)
-            healthKit.logStandingBout(elapsedSeconds: seconds)
         case "error":
             workerError = obj["message"] as? String
         case "ack":

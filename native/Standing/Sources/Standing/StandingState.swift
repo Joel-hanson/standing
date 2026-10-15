@@ -25,10 +25,6 @@ struct StandingState: Equatable, Sendable {
     var usageLabel: String = "—"
     var history: [HistoryDay] = []
     var historyLabel: String = "No activity recorded yet"
-    var stravaConnected: Bool = false
-    var stravaConfigured: Bool = false
-    var stravaLabel: String = "Not connected"
-    var stravaUiEnabled: Bool = false
 
     static let empty = StandingState()
 
@@ -89,10 +85,6 @@ struct StandingState: Equatable, Sendable {
         s.barSymbol = json["bar_symbol"] as? String ?? "pause.circle"
         s.usageLabel = json["usage_label"] as? String ?? "—"
         s.historyLabel = json["history_label"] as? String ?? "No activity recorded yet"
-        s.stravaConnected = json["strava_connected"] as? Bool ?? false
-        s.stravaConfigured = json["strava_configured"] as? Bool ?? false
-        s.stravaLabel = json["strava_label"] as? String ?? "Not connected"
-        s.stravaUiEnabled = json["strava_ui_enabled"] as? Bool ?? false
         if let rows = json["history"] as? [[String: Any]] {
             s.history = rows.compactMap { row in
                 guard let day = row["day"] as? String else { return nil }
