@@ -28,7 +28,7 @@ for arg in "$@"; do
   esac
 done
 
-APP_VERSION="${STANDING_APP_VERSION:-0.1.0}"
+APP_VERSION="${STANDING_APP_VERSION:-0.2.0}"
 APP="$ROOT/native/Standing/Standing.app"
 DIST="$ROOT/dist"
 DMG_PATH="${STANDING_DMG_PATH:-$DIST/Standing-${APP_VERSION}.dmg}"

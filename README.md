@@ -30,7 +30,3 @@ Both drive the same `StandingCore` in `src/core.py`.
 ```bash
 python -m src.main --sit-warn-minutes 25 --stand-warn-minutes 40 -v
 ```
-
-## Shipping
-
-DMG first, Mac App Store later — see [SHIPPING.md](SHIPPING.md).
