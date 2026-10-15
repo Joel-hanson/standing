@@ -273,6 +273,17 @@ class StandingTracker:
         input_tokens: int,
         reason: str,
     ) -> None:
+        self._apply_posture(new_posture, reason=reason)
+        self.stats.api_calls += 1
+        self.stats.input_tokens += input_tokens
+        self.save()
+
+    def set_posture_from_cache(self, new_posture: Posture, *, reason: str = "cache") -> None:
+        """Apply a cached posture without incrementing API usage counters."""
+        self._apply_posture(new_posture, reason=reason)
+        self.save()
+
+    def _apply_posture(self, new_posture: Posture, *, reason: str) -> None:
         self._roll_day_if_needed()
         now = time.monotonic()
         self._accumulate(now)
@@ -294,12 +305,9 @@ class StandingTracker:
             self._sitting_since = None
 
         self.posture = new_posture
-        self.stats.api_calls += 1
-        self.stats.input_tokens += input_tokens
         self.last_call_reason = reason
         self.last_error = None
         self._last_tick = now
-        self.save()
 
     def set_error(self, message: str) -> None:
         self.last_error = message

@@ -16,20 +16,25 @@ from src.credentials import clear_api_key, get_api_key, set_api_key
 from src.jev_client import JevPostureClient
 from src.logging_setup import get_logger
 from src.motion import MotionGate
+from src import paths as app_paths
+from src.scene_cache import ScenePoseCache, gray_from_jpeg
 from src import strava as strava_api
 from src.suggestions import SuggestionEngine
 from src.tracker import StandingTracker, format_duration
 
 ROOT = Path(__file__).resolve().parents[1]
-DATA = ROOT / "data"
+DATA = app_paths.user_data_dir()
 STATS_PATH = DATA / "stats.json"
 HISTORY_PATH = DATA / "history.json"
+SCENE_CACHE_PATH = DATA / "scene_cache.json"
 STANDING_CAL = DATA / "calibrate_standing.jpg"
 SITTING_CAL = DATA / "calibrate_sitting.jpg"
-DEFAULT_LOG = DATA / "standing.log"
+DEFAULT_LOG = app_paths.user_log_dir() / "standing.log"
 
 NotifyFn = Callable[[str, str], None]
 StateFn = Callable[[dict[str, Any]], None]
+# Elapsed standing seconds when a bout ends (confirmed sit/away or pause).
+StandingBoutFn = Callable[[float], None]
 
 
 def calibration_label(*, has_standing: bool, has_sitting: bool) -> str:
@@ -70,6 +75,12 @@ def add_common_args(p: argparse.ArgumentParser) -> None:
         const=str(DEFAULT_LOG),
         default=str(DEFAULT_LOG),
         help=f"Also write logs to a file (default: {DEFAULT_LOG}). Pass empty to disable: --log-file ''",
+    )
+    p.add_argument(
+        "--scene-cache",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Reuse posture for familiar scene+pose (default on; never adds API calls)",
     )
 
 
@@ -118,13 +129,15 @@ class StandingCore:
         *,
         on_state: StateFn | None = None,
         on_notify: NotifyFn | None = None,
+        on_standing_bout: StandingBoutFn | None = None,
     ) -> None:
         self.args = args
         self.log = get_logger()
         self.log_path = log_path
         self._on_state = on_state
         self._on_notify = on_notify
-        DATA.mkdir(parents=True, exist_ok=True)
+        self._on_standing_bout = on_standing_bout
+        app_paths.ensure_dirs(repo_root=ROOT)
 
         api_key = get_api_key()
         self.tracker = StandingTracker(STATS_PATH, HISTORY_PATH)
@@ -140,6 +153,9 @@ class StandingCore:
             sit_warn_minutes=args.sit_warn_minutes,
             stand_warn_minutes=args.stand_warn_minutes,
         )
+        scene_cache_on = bool(getattr(args, "scene_cache", True))
+        self.scene_cache = ScenePoseCache(SCENE_CACHE_PATH, enabled=scene_cache_on)
+        self._load_scene_cache_anchors()
 
         self._stop = threading.Event()
         self._loop_thread: threading.Thread | None = None
@@ -155,12 +171,14 @@ class StandingCore:
         self._camera_backoff_s = 2.0
 
         self.log.info(
-            "Ready (model=%s, max_side=%s, idle=%ss, sit_warn=%sm, stand_warn=%sm, key=%s)",
+            "Ready (model=%s, max_side=%s, idle=%ss, sit_warn=%sm, stand_warn=%sm, "
+            "scene_cache=%s, key=%s)",
             args.model,
             args.max_side,
             args.idle_seconds,
             args.sit_warn_minutes,
             args.stand_warn_minutes,
+            "on" if scene_cache_on else "off",
             "yes" if api_key else "missing",
         )
 
@@ -169,11 +187,14 @@ class StandingCore:
         *,
         on_state: StateFn | None = None,
         on_notify: NotifyFn | None = None,
+        on_standing_bout: StandingBoutFn | None = None,
     ) -> None:
         if on_state is not None:
             self._on_state = on_state
         if on_notify is not None:
             self._on_notify = on_notify
+        if on_standing_bout is not None:
+            self._on_standing_bout = on_standing_bout
 
     def notify(self, title: str, message: str) -> None:
         if self._on_notify:
@@ -283,6 +304,7 @@ class StandingCore:
     def set_tracking(self, enabled: bool) -> dict[str, Any]:
         need_key = False
         ended_standing: float | None = None
+        release_camera = False
         with self._lock:
             if enabled and not get_api_key():
                 self.log.warning("Start blocked — set TypeSafe API key first")
@@ -295,6 +317,7 @@ class StandingCore:
                     elif self._pending_strava_seconds is not None:
                         ended_standing = self._pending_strava_seconds
                     self._pending_strava_seconds = None
+                    release_camera = True
                 self.tracker.set_tracking(enabled)
                 if enabled:
                     self.log.info("Tracking started")
@@ -306,8 +329,11 @@ class StandingCore:
                 else:
                     self.log.info("Tracking paused")
                 self.publish_state()
+        if release_camera:
+            self.camera.close()
+            self.log.debug("Camera released while paused")
         if ended_standing is not None:
-            self._maybe_push_strava(ended_standing)
+            self._standing_bout_ended(ended_standing)
         if need_key:
             self.notify("API key needed", "Open Settings… to add your TypeSafe key.")
             return {"ok": False, "error": "api_key_required"}
@@ -345,6 +371,15 @@ class StandingCore:
         self.log.info("Strava disconnected")
         self.notify("Strava disconnected", "Tokens removed from Keychain.")
         return {"ok": True}
+
+    def _standing_bout_ended(self, elapsed_seconds: float) -> None:
+        """Notify shells (HealthKit) and optional Strava after a standing bout ends."""
+        if self._on_standing_bout:
+            try:
+                self._on_standing_bout(elapsed_seconds)
+            except Exception:  # noqa: BLE001
+                self.log.exception("standing_bout callback failed")
+        self._maybe_push_strava(elapsed_seconds)
 
     def _maybe_push_strava(self, elapsed_seconds: float) -> None:
         if not strava_api.feature_enabled() or not strava_api.is_connected():
@@ -424,11 +459,16 @@ class StandingCore:
 
     def clear_api_key(self) -> dict[str, Any]:
         clear_api_key()
+        release_camera = False
         with self._lock:
             if self.tracker.tracking:
                 self.tracker.set_tracking(False)
+                release_camera = True
             self.jev.set_api_key(None)
             self.publish_state()
+        if release_camera:
+            self.camera.close()
+            self.log.debug("Camera released while paused")
         self.log.info("API key cleared from Keychain")
         self.notify("API key cleared", "Tracking paused. Set a new key to continue.")
         return {"ok": True}
@@ -442,13 +482,24 @@ class StandingCore:
             frame = self.camera.grab()
             path.write_bytes(frame.jpeg_bytes)
             with self._lock:
+                tracking = self.tracker.tracking
                 self.jev.set_examples(
                     standing_example=STANDING_CAL if STANDING_CAL.is_file() else None,
                     sitting_example=SITTING_CAL if SITTING_CAL.is_file() else None,
                 )
-                if self.tracker.tracking:
+                if posture == "standing":
+                    self.scene_cache.set_calibration_anchors(
+                        standing_gray=frame.gray_small
+                    )
+                else:
+                    self.scene_cache.set_calibration_anchors(
+                        sitting_gray=frame.gray_small
+                    )
+                if tracking:
                     self._force_next = True
                 self.publish_state()
+            if not tracking:
+                self.camera.close()
             self.log.info("Calibrated %s → %s (%d bytes)", posture, path, len(frame.jpeg_bytes))
             self.notify(
                 f"{posture.capitalize()} calibrated",
@@ -458,8 +509,11 @@ class StandingCore:
         except Exception as exc:  # noqa: BLE001
             self.log.exception("Calibration failed (%s)", posture)
             with self._lock:
+                tracking = self.tracker.tracking
                 self.tracker.set_error(str(exc))
                 self.publish_state()
+            if not tracking:
+                self.camera.close()
             self.notify("Calibration failed", str(exc)[:120])
             return {"ok": False, "error": str(exc)}
 
@@ -469,10 +523,28 @@ class StandingCore:
                 path.unlink()
         with self._lock:
             self.jev.set_examples(standing_example=None, sitting_example=None)
+            self.scene_cache.clear()
             self.publish_state()
-        self.log.info("Calibration photos cleared")
+        self.log.info("Calibration photos cleared (scene cache wiped)")
         self.notify("Calibration cleared", "Posture examples removed.")
         return {"ok": True}
+
+    def _load_scene_cache_anchors(self) -> None:
+        """Seed pose anchors from existing calibration JPEGs when present."""
+        if not self.scene_cache.enabled:
+            return
+        sitting_gray = None
+        standing_gray = None
+        if self.scene_cache.sit_anchor is None and SITTING_CAL.is_file():
+            sitting_gray = gray_from_jpeg(SITTING_CAL.read_bytes())
+        if self.scene_cache.stand_anchor is None and STANDING_CAL.is_file():
+            standing_gray = gray_from_jpeg(STANDING_CAL.read_bytes())
+        if sitting_gray is None and standing_gray is None:
+            return
+        self.scene_cache.set_calibration_anchors(
+            sitting_gray=sitting_gray,
+            standing_gray=standing_gray,
+        )
 
     def open_log(self) -> dict[str, Any]:
         path = self.log_path or DEFAULT_LOG
@@ -544,6 +616,13 @@ class StandingCore:
             time.sleep(sleep_s)
 
     def _on_camera_unavailable(self, exc: CameraUnavailable) -> float:
+        with self._lock:
+            tracking = self.tracker.tracking
+        if not tracking:
+            # Pause already released the camera; don't reclaim the green LED.
+            self.camera.close()
+            return self.args.poll_ms / 1000.0
+
         if not self._camera_down:
             self.log.warning("%s Waiting for camera (common after Mac sleep)…", exc)
             self._camera_down = True
@@ -626,12 +705,37 @@ class StandingCore:
                 return
 
             jpeg = frame.jpeg_bytes
+            gray = frame.gray_small
             prev_posture = self.tracker.posture
+            features = self.scene_cache.features(gray)
+            cached = self.scene_cache.lookup(
+                features,
+                reason=reason,
+                current_posture=prev_posture,
+            )
+            if cached is not None:
+                self._last_api_at = now
+                self.tracker.set_posture_from_cache(
+                    cached, reason=f"cache:{reason}"
+                )
+                self.log.info(
+                    "Cache hit (%s) scene=%s band=%s → %s (skipped Jev)",
+                    reason,
+                    features.scene_id[:8],
+                    features.pose_band,
+                    cached,
+                )
+                self._pending_confirm_at = None
+                self.publish_state()
+                return
+
             self.log.info(
-                "Calling Jev (%s) motion=%.1f prev=%s jpeg=%dB",
+                "Calling Jev (%s) motion=%.1f prev=%s scene=%s band=%s jpeg=%dB",
                 reason,
                 score,
                 prev_posture,
+                features.scene_id[:8],
+                features.pose_band,
                 len(jpeg),
             )
 
@@ -658,6 +762,7 @@ class StandingCore:
                 input_tokens=result.input_tokens,
                 reason=reason or "api",
             )
+            self.scene_cache.remember(features, result.posture)
             flipped = result.posture != prev_posture
             self.log.info(
                 "Jev → %s (was %s)%s tokens=%d cost~$%.4f stand_ups=%d",
@@ -685,4 +790,4 @@ class StandingCore:
                 self._pending_confirm_at = None
             self.publish_state()
         if ended_standing is not None:
-            self._maybe_push_strava(ended_standing)
+            self._standing_bout_ended(ended_standing)

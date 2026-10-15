@@ -4,10 +4,10 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#0a0a0a" />
-    <title>Standing — AI-based standing tracker for macOS</title>
+    <title>Standing — desk posture tracker for macOS</title>
     <meta
       name="description"
-      content="AI-based standing tracker for Mac. Quiet menu bar app that watches your desk posture and nudges you when you’ve sat too long."
+      content="Quiet menu bar app for Mac that watches your desk posture and nudges you when you’ve sat too long."
     />
     <link rel="icon" href="favicon.svg" type="image/svg+xml" />
     <link rel="icon" href="favicon.ico" sizes="any" />
@@ -64,6 +64,12 @@
         padding: 1.25rem 0 3rem;
       }
 
+      /* Shared text column — hero, loop, why, footer */
+      .content {
+        max-width: 720px;
+        margin-inline: auto;
+      }
+
       .nav {
         display: flex;
         align-items: center;
@@ -89,8 +95,6 @@
       }
 
       .hero {
-        max-width: 720px;
-        margin-inline: auto;
         padding-bottom: 2.5rem;
         text-align: center;
         animation: fade-up 0.7s var(--ease) both;
@@ -169,7 +173,93 @@
         font-size: 0.88rem;
       }
 
-      /* —— How? screenshot + curved dashed arrows —— */
+      .meta a {
+        color: var(--text-secondary);
+        text-decoration: underline;
+        text-underline-offset: 2px;
+      }
+
+      .meta a:hover {
+        color: var(--primary);
+      }
+
+      .hero-secondary {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 1rem 1.35rem;
+        margin-top: 0.15rem;
+        font-size: 0.9rem;
+        color: var(--muted);
+      }
+
+      .hero-secondary a:hover {
+        color: var(--primary);
+      }
+
+      /* —— Loop: sit → check → nudge —— */
+      .loop {
+        margin: 0 auto 3rem;
+        text-align: center;
+        animation: fade-up 0.75s var(--ease) both;
+      }
+
+      .loop h2 {
+        font-size: 1.75rem;
+        font-weight: 650;
+        letter-spacing: -0.03em;
+        margin-bottom: 0.55rem;
+      }
+
+      .loop-lede {
+        color: var(--muted);
+        font-size: 0.98rem;
+        margin-bottom: 1.5rem;
+      }
+
+      .loop-steps {
+        list-style: none;
+        display: grid;
+        gap: 1.15rem;
+        text-align: center;
+        counter-reset: loop;
+      }
+
+      @media (min-width: 640px) {
+        .loop-steps {
+          grid-template-columns: repeat(3, 1fr);
+          gap: 1.25rem;
+          text-align: left;
+        }
+      }
+
+      .loop-steps li {
+        padding: 0.15rem 0;
+        counter-increment: loop;
+      }
+
+      .loop-steps strong {
+        display: block;
+        font-size: 0.95rem;
+        font-weight: 600;
+        letter-spacing: -0.01em;
+        margin-bottom: 0.25rem;
+        color: var(--text);
+      }
+
+      .loop-steps strong::before {
+        content: counter(loop) ". ";
+        color: var(--arrow);
+      }
+
+      .loop-steps span {
+        display: block;
+        font-size: 0.9rem;
+        color: var(--muted);
+        line-height: 1.45;
+      }
+
+      /* —— Tour: screenshot + curved dashed arrows —— */
       .how {
         margin: 1rem 0 3.5rem;
       }
@@ -179,7 +269,15 @@
         font-weight: 650;
         letter-spacing: -0.03em;
         text-align: center;
-        margin-bottom: 2.25rem;
+        margin-bottom: 0.45rem;
+      }
+
+      .how-lede {
+        color: var(--muted);
+        font-size: 0.98rem;
+        text-align: center;
+        max-width: 42ch;
+        margin: 0 auto 2.25rem;
       }
 
       .board {
@@ -317,6 +415,7 @@
         list-style: none;
         margin-top: 1.15rem;
         gap: 0.85rem;
+        text-align: left;
       }
 
       .notes-stack li strong {
@@ -331,15 +430,10 @@
         font-size: 0.88rem;
       }
 
-      .why {
-        max-width: 720px;
-        margin-inline: auto;
-      }
-
       .why h2 {
-        font-size: 1.35rem;
-        font-weight: 600;
-        letter-spacing: -0.02em;
+        font-size: 1.75rem;
+        font-weight: 650;
+        letter-spacing: -0.03em;
         margin-bottom: 1.35rem;
         text-align: center;
       }
@@ -348,6 +442,7 @@
         list-style: none;
         display: grid;
         gap: 1.35rem 2rem;
+        text-align: left;
       }
 
       @media (min-width: 640px) {
@@ -377,7 +472,6 @@
         flex-wrap: wrap;
         justify-content: space-between;
         gap: 0.75rem 1.5rem;
-        max-width: 720px;
       }
 
       footer a:hover {
@@ -432,46 +526,57 @@
   <body>
     <div class="shell">
       <nav class="nav">
-        <a class="nav-brand" href="https://joelhanson.com">Joel Hanson</a>
+        <a class="nav-brand" href="#">Standing</a>
         <div class="nav-links">
-          <a href="https://joelhanson.com/projects/">Projects</a>
-          <a href="https://github.com/Joel-hanson">GitHub</a>
+          <a href="#download">Download</a>
+          <a href="#how">How</a>
+          <a href="#support">Support</a>
         </div>
       </nav>
 
-      <header class="hero">
+      <header class="hero content">
         <h1 class="brand">Standing</h1>
         <p class="lede">
-          AI-based standing tracker for macOS — watches your desk posture and nudges you when you’ve sat too long.
+          A quiet macOS menu bar app that watches your desk posture and nudges you when you’ve sat too long.
         </p>
-        <p class="tagline">Webcam + AI. Quiet menu bar. Cost-aware.</p>
+        <p class="tagline">Webcam checks sit vs stand. No timer guessing.</p>
         <div class="cta">
           <a
             class="btn btn-primary"
             id="download"
             href="https://github.com/Joel-hanson/standing/releases/latest"
           >
-            Download now
-          </a>
-          <a class="btn btn-ghost" href="https://github.com/Joel-hanson/standing">
-            View on GitHub
-          </a>
-          <a
-            class="btn btn-ghost"
-            id="support"
-            href="https://gumroad.com/l/standing"
-          >
-            Support — $5
+            Download for Mac
           </a>
         </div>
-        <p class="meta">
-          Requires macOS · Free forever · Optional one-time support · Bring your own
-          <a href="https://console.typesafe.ai">TypeSafe API key</a>
+        <p class="meta">Free forever · Optional <a id="support" href="https://gumroad.com/l/standing">$5 support</a></p>
+        <p class="hero-secondary">
+          <a href="https://github.com/Joel-hanson/standing">View on GitHub</a>
         </p>
       </header>
 
-      <section class="how" id="how" aria-labelledby="how-title">
-        <h2 id="how-title">How?</h2>
+      <section class="loop content" id="how" aria-labelledby="loop-title">
+        <h2 id="loop-title">How it works</h2>
+        <p class="loop-lede">Three steps. That is the whole product.</p>
+        <ol class="loop-steps">
+          <li>
+            <strong>You sit at your desk</strong>
+            <span>Standing lives in the menu bar and watches the webcam only when it needs a check.</span>
+          </li>
+          <li>
+            <strong>It notices posture</strong>
+            <span>Vision AI looks at a small frame and decides sitting or standing — not a timer.</span>
+          </li>
+          <li>
+            <strong>You get a gentle nudge</strong>
+            <span>If one posture lasts too long, macOS notifies you. Stand, sit, or pause for a meeting.</span>
+          </li>
+        </ol>
+      </section>
+
+      <section class="how" aria-labelledby="how-title">
+        <h2 id="how-title">Inside the app</h2>
+        <p class="how-lede">Menu, activity, and settings — what you’ll see day to day.</p>
 
         <!-- Menu: alternate sides so labels never stack on top of each other -->
         <figure class="board board-menu">
@@ -657,21 +762,21 @@
         </figure>
       </section>
 
-      <section class="why" id="why">
-        <h2>Why?</h2>
+      <section class="why content" id="why">
+        <h2>Why Standing</h2>
         <ul class="features">
           <li>
             <h3>AI posture checks</h3>
-            <p>Uses vision AI (Jev) on your webcam to tell sitting from standing — not timers or guesswork.</p>
+            <p>Uses vision AI on your webcam to tell sitting from standing — not timers or guesswork.</p>
           </li>
           <li>
             <h3>Quiet menu bar</h3>
             <p>A small icon and streak time near the clock. Open the menu when you want a glance.</p>
           </li>
           <li>
-            <h3>Cost-aware AI</h3>
+            <h3>Checks only when needed</h3>
             <p>
-              Jev is only called on motion or a slow heartbeat — never on every webcam frame.
+              AI runs on motion or a slow heartbeat — never on every webcam frame.
               No motion, same posture — it waits instead of re-asking.
             </p>
           </li>
@@ -682,9 +787,9 @@
           <li>
             <h3>Your key, your camera</h3>
             <p>
-              Get a key at
-              <a href="https://console.typesafe.ai">console.typesafe.ai</a>;
-              it lives in Keychain. Frames are checked when needed, not streamed all day.
+              Bring your own API key from
+              <a href="https://console.typesafe.ai">console.typesafe.ai</a>
+              (saved in Keychain). Frames are checked when needed, not streamed all day.
             </p>
           </li>
           <li>
@@ -694,8 +799,8 @@
         </ul>
       </section>
 
-      <footer>
-        <p>Standing · AI standing tracker · a <a href="https://joelhanson.com">Joel Hanson</a> project</p>
+      <footer class="content">
+        <p>Standing · desk posture for Mac · a <a href="https://joelhanson.com">Joel Hanson</a> project</p>
         <p>
           <a href="#download">Download</a>
           ·

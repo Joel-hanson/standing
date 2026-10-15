@@ -2,6 +2,7 @@ import SwiftUI
 
 struct SettingsView: View {
     @EnvironmentObject private var bridge: PythonBridge
+    @EnvironmentObject private var healthKit: HealthKitLogger
     @EnvironmentObject private var updater: UpdaterController
 
     var body: some View {
@@ -47,6 +48,31 @@ struct SettingsView: View {
                             .font(.caption)
                             .foregroundStyle(Color.orange)
                     }
+                }
+            }
+
+            Section("Apple Health") {
+                if healthKit.isAvailable {
+                    Toggle(
+                        "Log standing sessions",
+                        isOn: Binding(
+                            get: { healthKit.isEnabled },
+                            set: { bridge.setHealthKitLogging($0) }
+                        )
+                    )
+                    Text(
+                        "Off by default. When on, standing bouts of 10+ minutes are saved as Workouts in Apple Health (not the Watch Stand ring)."
+                    )
+                    .font(.caption)
+                    .foregroundStyle(Color.secondary)
+                    if let err = healthKit.lastError {
+                        Text(err)
+                            .font(.caption)
+                            .foregroundStyle(Color.red)
+                    }
+                } else {
+                    Text("Apple Health is not available on this Mac.")
+                        .foregroundStyle(Color.secondary)
                 }
             }
 

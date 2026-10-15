@@ -12,6 +12,8 @@ final class PythonBridge: ObservableObject {
     @Published var standWarnText = "45"
     @Published var apiKeyDraft = ""
 
+    let healthKit = HealthKitLogger()
+
     private var process: Process?
     private var stdinPipe: Pipe?
     private var stdoutPipe: Pipe?
@@ -28,6 +30,10 @@ final class PythonBridge: ObservableObject {
             UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
         }
         startWorker()
+    }
+
+    func setHealthKitLogging(_ enabled: Bool) {
+        Task { await healthKit.setEnabled(enabled) }
     }
 
     deinit {
@@ -175,6 +181,10 @@ final class PythonBridge: ObservableObject {
             let title = obj["title"] as? String ?? "Standing"
             let message = obj["message"] as? String ?? ""
             postNotification(title: title, message: message)
+        case "standing_bout_ended":
+            let seconds = obj["elapsed_seconds"] as? Double
+                ?? Double(obj["elapsed_seconds"] as? Int ?? 0)
+            healthKit.logStandingBout(elapsedSeconds: seconds)
         case "error":
             workerError = obj["message"] as? String
         case "ack":
@@ -224,6 +234,13 @@ final class PythonBridge: ObservableObject {
     static func resolveRepoRoot() -> URL {
         if let env = ProcessInfo.processInfo.environment["STANDING_ROOT"], !env.isEmpty {
             return URL(fileURLWithPath: env)
+        }
+        // Release DMG: Python + src live inside the app bundle.
+        if let resources = Bundle.main.resourceURL {
+            let bundled = resources.appendingPathComponent("StandingPayload")
+            if FileManager.default.fileExists(atPath: bundled.appendingPathComponent("src/worker.py").path) {
+                return bundled
+            }
         }
         // native/Standing → repo root (two levels up from Package.swift directory when running via swift)
         let cwd = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)

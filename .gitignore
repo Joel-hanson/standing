@@ -6,7 +6,10 @@ __pycache__/
 *.egg-info/
 .pytest_cache/
 .DS_Store
+# Legacy local data dir (runtime data now lives in ~/Library/Application Support/Standing/)
 data/stats.json
+data/history.json
+data/scene_cache.json
 data/standing.log
 data/calibrate_*.jpg
 *.jpg
@@ -18,3 +21,4 @@ data/calibrate_*.jpg
 native/Standing/.build/
 native/Standing/.swiftpm/
 native/Standing/Standing.app/
+dist/

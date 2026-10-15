@@ -37,6 +37,7 @@ struct StandingApp: App {
         Settings {
             SettingsView()
                 .environmentObject(bridge)
+                .environmentObject(bridge.healthKit)
                 .environmentObject(updater)
                 // Pin the system Settings window to a compact preference width.
                 .frame(width: 400)

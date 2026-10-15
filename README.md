@@ -13,6 +13,11 @@ Webcam frame (every ~0.5s)
      moved / heartbeat / start
         │
         ▼
+  Scene+pose cache ── familiar? ──► reuse label (no API)
+        │
+     new / ambiguous / start / confirm
+        │
+        ▼
   resize JPEG (~360px) ──► Jev ──► sit | stand
         │
         ▼
@@ -23,11 +28,12 @@ Webcam frame (every ~0.5s)
 
 1. You are sitting. Frames look almost the same. Motion score stays low. No API call.
 2. You stand up. Frame difference crosses the motion threshold. Standing sends one JPEG to Jev.
-3. Jev returns `standing`. The tracker starts a standing streak and updates the menu bar.
+3. Jev returns `standing`. The tracker starts a standing streak and updates the menu bar. That `(scene, pose band)` is remembered locally.
 4. For the next ~15s (cooldown), more motion does not trigger another call.
-5. If you stay still for ~3 minutes (heartbeat), Standing checks again so a missed transition does not stick forever.
+5. If you stay still for ~3 minutes (heartbeat), Standing checks again — but if the scene and coarse pose still match a recent label, it reuses the cache instead of calling Jev.
+6. Every 8th cache hit on the same key forces one Jev refresh so labels do not go stale.
 
-That is the whole cost model: **motion gate + cooldown + heartbeat**, not “every frame.”
+That is the whole cost model: **motion gate + scene/pose cache + cooldown + heartbeat**, not “every frame.” The cache only *skips* calls the gates already planned; it never adds spend. It stores a tiny JSON file (≤32 entries, ~32 KB, 7-day TTL, no photos).
 
 ## Two shells, one brain
 
@@ -78,6 +84,10 @@ Standing uses your own TypeSafe key (bring-your-own).
 
 Look in the **menu bar** (near the clock) for the sit/stand icon.
 
+Stats, history, and calibration photos are stored in
+`~/Library/Application Support/Standing/` (not in the app or repo). Logs go to
+`~/Library/Logs/Standing/`. A one-time migrate copies any old repo `data/` files there.
+
 ### Shell A — rumps
 
 ```bash
@@ -101,7 +111,8 @@ Requires Xcode / Swift 5.9+ (macOS 14+). Packages a real `.app`:
 | Settings | API key, calibration, sit/stand thresholds, Support |
 | Activity (B) | 7-day stand/sit chart, recent days, usage |
 | Nudges | Notifications after ~30 min sitting or ~45 min standing |
-| Cost controls | Motion gate, heartbeat (~180s), cooldown (~15s), ~360px images |
+| Apple Health (B) | Optional — log 10+ min standing bouts as Workouts (Settings, off by default) |
+| Cost controls | Motion gate, scene+pose cache, heartbeat (~180s), cooldown (~15s), ~360px images |
 | Support | Optional one-time **$5** — app stays free (no feature locks) |
 
 ```bash
@@ -120,6 +131,8 @@ tail -f data/standing.log
 ## Shipping
 
 **DMG first, Mac App Store later** — see [SHIPPING.md](SHIPPING.md). Lane B is the Store-shaped shell; Python remains the worker for now.
+
+CI: every push/PR runs a macOS smoke build (`./scripts/ci-smoke.sh`). Release: push a `v*` tag → builds `Standing.dmg` and publishes a GitHub Release. Add Apple Developer secrets for notarized builds.
 
 ## Boundaries worth knowing
 

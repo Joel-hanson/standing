@@ -33,15 +33,77 @@
 
 - Customer API keys live in **their** macOS Keychain (`Standing` / `typesafe_api_key`), never in the app binary.
 - `.env` / `TYPESAFE_API_KEY` is a **dev-only** fallback. It is gitignored; **never** copy `.env` into a DMG, `.app`, or PyInstaller `datas=`.
-- Packaging checklist: exclude `.env`, `data/stats.json`, calibration images, and local logs. Ship `.env.example` only.
+- Packaging checklist: exclude `.env` and any local `data/` leftovers. Ship `.env.example` only.
+- Runtime state is **not** bundled: stats, history, and calibration live in
+  `~/Library/Application Support/Standing/`; logs in `~/Library/Logs/Standing/`.
+  (Created on first launch; survives app updates. Override with `STANDING_DATA_DIR` / `STANDING_LOG_DIR`.)
 - First launch with no key opens **Settings** and hides **Start Tracking** until a key is saved.
 
-## DMG path (next packaging step)
-1. Apple Developer ID certificate  
-2. Prefer packaging **Lane B**: Swift app bundle + embedded `.venv` or PyInstaller worker binary  
-3. Fallback: Lane A only with Briefcase / PyInstaller into `Standing.app`  
-4. `codesign` → `notarytool` → staple  
-5. Wrap in a DMG and host (GitHub Releases is enough)
+## DMG path (packaging)
+
+Local:
+
+```bash
+export STANDING_APP_VERSION=0.2.0
+export STANDING_APP_BUILD=2
+# optional Sparkle:
+# export STANDING_SPARKLE_FEED_URL=https://…/appcast.xml
+# export STANDING_SPARKLE_PUBLIC_ED_KEY=…
+./scripts/package-dmg.sh   # → dist/Standing-0.2.0.dmg
+```
+
+`package-app.sh --release` embeds `src/` + a fresh `.venv` under
+`Standing.app/Contents/Resources/StandingPayload/` (never `.env` or local data).
+Dev builds (`./scripts/run-native.sh`) still point at the repo `.venv`.
+
+Manual Apple steps (or let CI do them — see below):
+1. Apple Developer ID certificate
+2. `codesign` → `notarytool` → staple
+3. Host the DMG on GitHub Releases
+
+## GitHub Actions CI (macOS smoke)
+
+Every push to `main` and every PR runs [`.github/workflows/ci.yml`](.github/workflows/ci.yml) on `macos-14`:
+
+1. Install Python deps into `.venv`
+2. Import core modules (`src.core`, `src.worker`, …)
+3. `package-app.sh` → verify `Standing.app` layout
+4. Wrap a DMG and mount it to confirm the app is inside
+
+Locally: `./scripts/ci-smoke.sh`
+
+## GitHub Actions release
+
+Push a version tag (or run **Release** via workflow_dispatch):
+
+```bash
+git tag v0.2.0
+git push origin v0.2.0
+```
+
+Workflow: [`.github/workflows/release.yml`](.github/workflows/release.yml)
+
+| Step | What it does |
+| --- | --- |
+| Build | `package-dmg.sh` on `macos-14` (Swift shell + embedded Python) |
+| Sign / notary | If Apple secrets are set — otherwise uploads an unsigned DMG |
+| Sparkle | If `SPARKLE_PRIVATE_ED_KEY` is set — attaches `appcast.xml` |
+| Publish | Creates a GitHub Release with the DMG (+ appcast when present) |
+
+**Repo secrets** (Settings → Secrets and variables → Actions):
+
+| Secret | Purpose |
+| --- | --- |
+| `APPLE_CERTIFICATE_P12_BASE64` | `base64` of Developer ID Application `.p12` |
+| `APPLE_CERTIFICATE_PASSWORD` | `.p12` export password |
+| `APPLE_API_KEY_P8_BASE64` | `base64` of App Store Connect `AuthKey_*.p8` |
+| `APPLE_API_KEY_ID` | Key id |
+| `APPLE_API_ISSUER_ID` | Issuer UUID |
+| `SPARKLE_PRIVATE_ED_KEY` | Sparkle ed25519 private key (optional) |
+| `STANDING_SPARKLE_PUBLIC_ED_KEY` | Public key baked into Info.plist (optional) |
+| `STANDING_SPARKLE_FEED_URL` | HTTPS appcast URL (optional) |
+
+Without Apple secrets the workflow still publishes a DMG for smoke-testing; other Macs will see a Gatekeeper warning until you add signing + notarization.
 
 ## In-app updates (Sparkle · Lane B)
 
@@ -62,7 +124,7 @@ export STANDING_SPARKLE_PUBLIC_ED_KEY="YOUR_ED25519_PUBLIC_KEY"
 ```
 
 **Each patch**
-1. Bump `STANDING_APP_VERSION` / `STANDING_APP_BUILD`
+1. Bump version and push `vX.Y.Z` (CI packages, optionally notarizes, and publishes), **or** locally:
 2. Notarize the new DMG
 3. Run `sign_update Standing.dmg` and paste signature + length into `appcast.xml`
 4. Publish the DMG + updated appcast — existing installs pick it up (or via **Check for Updates…**)
