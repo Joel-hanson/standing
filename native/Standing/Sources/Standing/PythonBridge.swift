@@ -47,6 +47,16 @@ final class PythonBridge: ObservableObject {
     func saveApiKey() {
         let key = apiKeyDraft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !key.isEmpty else { return }
+        // Persist locally (Application Support) — never Keychain (ad-hoc signing loops prompts).
+        if usesHostKeyStore {
+            do {
+                try StandingAPIKeyStore.set(key)
+            } catch {
+                workerError = error.localizedDescription
+                apiKeyStatus = nil
+                return
+            }
+        }
         guard workerIsAlive else {
             workerError = "AI helper is not running. Quit Standing from the menu bar and reopen it, then try again."
             apiKeyStatus = nil
@@ -59,7 +69,12 @@ final class PythonBridge: ObservableObject {
         send(cmd: "save_api_key", ["key": key], id: id)
     }
 
-    func clearApiKey() { send(cmd: "clear_api_key") }
+    func clearApiKey() {
+        if usesHostKeyStore {
+            StandingAPIKeyStore.clear()
+        }
+        send(cmd: "clear_api_key")
+    }
 
     func applyThresholds() {
         let sit = Double(sitWarnText) ?? state.sitWarnMinutes
@@ -84,19 +99,45 @@ final class PythonBridge: ObservableObject {
 
     // MARK: - Worker lifecycle
 
+    /// Release payload: Swift owns the API key file; helper gets it via env only.
+    private var usesHostKeyStore: Bool {
+        Self.usesBundledPayload(repoRoot: repoRoot)
+    }
+
     private func startWorker() {
         let python = Self.resolvePython(repoRoot: repoRoot)
-        if python.path == "/usr/bin/python3", Self.runningInsideAppBundle {
+        if Self.runningInsideAppBundle,
+           !FileManager.default.isExecutableFile(
+               atPath: repoRoot.appendingPathComponent("python/bin/StandingWorker").path
+           ),
+           !FileManager.default.isExecutableFile(
+               atPath: repoRoot.appendingPathComponent("python/bin/python3.12").path
+           )
+        {
             workerError =
-                "Bundled Python is missing. Reinstall Standing from a fresh DMG (or run a dev build)."
+                "Bundled helper is missing. Reinstall Standing from a fresh DMG."
         }
         let process = Process()
         process.executableURL = python
         process.arguments = ["-m", "src.worker"]
         process.currentDirectoryURL = repoRoot
-        process.environment = ProcessInfo.processInfo.environment.merging([
-            "PYTHONUNBUFFERED": "1",
-        ]) { _, new in new }
+        var env = ProcessInfo.processInfo.environment
+        env["PYTHONUNBUFFERED"] = "1"
+        env["PYTHONDONTWRITEBYTECODE"] = "1"
+        // Avoid inheriting a host VIRTUAL_ENV / PYTHONHOME that breaks the embed.
+        env.removeValue(forKey: "VIRTUAL_ENV")
+        env.removeValue(forKey: "PYTHONHOME")
+        env.removeValue(forKey: "PYTHONPATH")
+        if usesHostKeyStore {
+            // Packages + runtime live inside the .app; never open Keychain as python*.
+            env["STANDING_DISABLE_KEYRING"] = "1"
+            if let key = StandingAPIKeyStore.get(), !key.isEmpty {
+                env["TYPESAFE_API_KEY"] = key
+            } else {
+                env.removeValue(forKey: "TYPESAFE_API_KEY")
+            }
+        }
+        process.environment = env
 
         let stdin = Pipe()
         let stdout = Pipe()
@@ -141,7 +182,8 @@ final class PythonBridge: ObservableObject {
             self.stderrPipe = stderr
             workerError = nil
         } catch {
-            workerError = "Could not start Python worker: \(error.localizedDescription)"
+            workerError =
+                "Could not start AI helper (\(python.lastPathComponent)): \(error.localizedDescription)"
         }
     }
 
@@ -236,7 +278,7 @@ final class PythonBridge: ObservableObject {
         let ok = obj["ok"] as? Bool ?? false
         if ok {
             apiKeyDraft = ""
-            apiKeyStatus = "Saved in Keychain"
+            apiKeyStatus = "Saved on this Mac"
             workerError = nil
         } else {
             let err = obj["error"] as? String ?? "Could not save key"
@@ -315,13 +357,26 @@ final class PythonBridge: ObservableObject {
         return cwd
     }
 
+    static func usesBundledPayload(repoRoot: URL) -> Bool {
+        let marker = repoRoot.appendingPathComponent("python/bin/StandingWorker")
+        if FileManager.default.isExecutableFile(atPath: marker.path) {
+            return true
+        }
+        // Older embeds before the StandingWorker rename.
+        return runningInsideAppBundle
+            && FileManager.default.fileExists(
+                atPath: repoRoot.appendingPathComponent("SHIP_ARCH").path
+            )
+    }
+
     static func resolvePython(repoRoot: URL) -> URL {
         if let env = ProcessInfo.processInfo.environment["STANDING_PYTHON"], !env.isEmpty {
             return URL(fileURLWithPath: env)
         }
-        // Release DMG: prefer the arm64 CPython copied into StandingPayload.
+        // Release DMG: StandingWorker (renamed CPython) with packages in-tree.
         // Dev: repo .venv. Never trust a dangling Framework symlink.
         let candidates = [
+            repoRoot.appendingPathComponent("python/bin/StandingWorker"),
             repoRoot.appendingPathComponent("python/bin/python3"),
             repoRoot.appendingPathComponent("python/bin/python3.12"),
             repoRoot.appendingPathComponent(".venv/bin/python3"),
@@ -334,7 +389,7 @@ final class PythonBridge: ObservableObject {
         // Inside a shipped .app, do not fall back to system Python — that hides
         // a broken embed and leaves Save AI key disabled with a vague error.
         if runningInsideAppBundle {
-            return repoRoot.appendingPathComponent("python/bin/python3")
+            return repoRoot.appendingPathComponent("python/bin/StandingWorker")
         }
         return URL(fileURLWithPath: "/usr/bin/python3")
     }

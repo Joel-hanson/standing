@@ -15,7 +15,7 @@ struct SettingsView: View {
 
             Section("Account") {
                 LabeledContent("AI API key") {
-                    Text(bridge.state.hasApiKey ? "Saved in Keychain" : "Not set")
+                    Text(bridge.state.hasApiKey ? "Saved on this Mac" : "Not set")
                         .foregroundStyle(.secondary)
                 }
                 SecureField(

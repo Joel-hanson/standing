@@ -17,15 +17,23 @@ case "$WANT_ARCH" in
     ;;
 esac
 
+APP="$(cd "$APP" && pwd)"
 PAYLOAD="$APP/Contents/Resources/StandingPayload"
 SHELL_BIN="$APP/Contents/MacOS/Standing"
-EMBED_PY="$PAYLOAD/python/bin/python3"
+EMBED_PY="$PAYLOAD/python/bin/StandingWorker"
+if [[ ! -e "$EMBED_PY" && ! -L "$EMBED_PY" ]]; then
+  EMBED_PY="$PAYLOAD/python/bin/python3"
+fi
 if [[ ! -e "$EMBED_PY" && ! -L "$EMBED_PY" ]]; then
   EMBED_PY="$PAYLOAD/python/bin/python3.12"
 fi
 
 test -x "$SHELL_BIN"
 test -e "$EMBED_PY" || test -L "$EMBED_PY"
+if [[ ! -x "$PAYLOAD/python/bin/StandingWorker" ]]; then
+  echo "Missing StandingWorker helper (packages should ship inside the app)." >&2
+  exit 1
+fi
 
 if [[ -f "$PAYLOAD/python/pyvenv.cfg" ]]; then
   echo "Embedded Python is a virtualenv; it will not run on other Macs." >&2

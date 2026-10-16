@@ -211,7 +211,7 @@ NATIVE="$ROOT/native/Standing"
 APP="$NATIVE/Standing.app"
 BIN_DIR="$NATIVE/.build/${SHIP_ARCH}-apple-macosx/release"
 
-APP_VERSION="${STANDING_APP_VERSION:-0.2.0}"
+APP_VERSION="${STANDING_APP_VERSION:-0.1.0}"
 APP_BUILD="${STANDING_APP_BUILD:-1}"
 SPARKLE_FEED_URL="${STANDING_SPARKLE_FEED_URL:-}"
 SPARKLE_PUBLIC_ED_KEY="${STANDING_SPARKLE_PUBLIC_ED_KEY:-}"
@@ -239,7 +239,8 @@ require_macho_arch "$BIN_DIR/Standing" "$SHIP_ARCH"
 echo "Packaging Standing.app…" >&2
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" "$APP/Contents/Frameworks"
-cp "$BIN_DIR/Standing" "$APP/Contents/MacOS/Standing"
+# Use /bin/cp — a shell `cp -i` alias can silently skip overwrite in some environments.
+/bin/cp -f "$BIN_DIR/Standing" "$APP/Contents/MacOS/Standing"
 chmod +x "$APP/Contents/MacOS/Standing"
 require_macho_arch "$APP/Contents/MacOS/Standing" "$SHIP_ARCH"
 
@@ -401,12 +402,27 @@ else
     "$EMBED_PY" -c "import platform, keyring, cv2, dotenv, numpy, PIL, typesafe_sdk; assert platform.machine() == '${SHIP_ARCH}', platform.machine(); print('embedded imports ok', platform.machine())"
   ) >&2
 
+  # Rename the launcher so macOS privacy / Keychain dialogs never say "python3.12".
+  # Packages stay in this tree; Standing launches StandingWorker -m src.worker.
+  REAL_PY="$(resolve_symlink_chain "$EMBED_PY")"
+  WORKER_BIN="$PAYLOAD/python/bin/StandingWorker"
+  cp -f "$REAL_PY" "$WORKER_BIN"
+  chmod +x "$WORKER_BIN"
+  require_macho_arch "$WORKER_BIN" "$SHIP_ARCH"
+  (
+    cd "$PAYLOAD"
+    "$WORKER_BIN" -c "import cv2, numpy, PIL, typesafe_sdk; print('StandingWorker ok')"
+  ) >&2
+  echo "  helper: $WORKER_BIN" >&2
+
   LS_ENVIRONMENT=$(cat <<EOF
 	<key>LSEnvironment</key>
 	<dict>
 		<key>PYTHONUNBUFFERED</key>
 		<string>1</string>
 		<key>PYTHONDONTWRITEBYTECODE</key>
+		<string>1</string>
+		<key>STANDING_DISABLE_KEYRING</key>
 		<string>1</string>
 	</dict>
 EOF

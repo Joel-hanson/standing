@@ -44,12 +44,12 @@
 Local:
 
 ```bash
-export STANDING_APP_VERSION=0.2.0
+export STANDING_APP_VERSION=0.1.0
 export STANDING_APP_BUILD=2
 # optional Sparkle:
 # export STANDING_SPARKLE_FEED_URL=https://…/appcast.xml
 # export STANDING_SPARKLE_PUBLIC_ED_KEY=…
-./scripts/package-dmg.sh   # → dist/Standing-0.2.0.dmg
+./scripts/package-dmg.sh   # → dist/Standing-0.1.0.dmg
 ```
 
 **Multi-arch DMGs (native per CPU).** GitHub Actions builds two release
@@ -62,10 +62,13 @@ artifacts on matching runners:
 
 Each build runs `swift build --arch <host>` and embeds a relocatable CPython
 via `uv` (`cpython-3.12-macos-aarch64-none` or `…-x86_64-none`) under
-`Standing.app/Contents/Resources/StandingPayload/python/`. Customers do not
-need Python installed. Packaging refuses virtualenvs and host-Framework
-symlinks so Save AI key cannot ship broken again. Cross-compiling from one
-Mac to the other is not supported (OpenCV/NumPy wheels must match the host).
+`Standing.app/Contents/Resources/StandingPayload/python/`, with worker deps
+installed into that tree. The launcher is renamed to `StandingWorker` so macOS
+never prompts about `python3.12`. The Swift shell owns the API-key Keychain
+entry and passes `TYPESAFE_API_KEY` into the helper (`STANDING_DISABLE_KEYRING=1`).
+Customers do not need Python installed. Packaging refuses virtualenvs and
+host-Framework symlinks so Save AI key cannot ship broken again. Cross-compiling
+from one Mac to the other is not supported (OpenCV/NumPy wheels must match the host).
 
 Also installs `requirements-release.txt` (no rumps/PyObjC) and strips
 tests/pip/unused stdlib (never `.env` or local data). Dev builds
@@ -94,8 +97,8 @@ Locally: `./scripts/ci-smoke.sh` (host arch). Release-embed smoke:
 Push a version tag (or run **Release** via workflow_dispatch):
 
 ```bash
-git tag v0.2.0
-git push origin v0.2.0
+git tag v0.1.0
+git push origin v0.1.0
 ```
 
 Workflow: [`.github/workflows/release.yml`](.github/workflows/release.yml)
@@ -133,7 +136,7 @@ Lane B ships with [Sparkle](https://sparkle-project.org). Local/dev builds omit 
 
 **Package a release build with updates enabled**
 ```bash
-export STANDING_APP_VERSION=0.2.0
+export STANDING_APP_VERSION=0.1.0
 export STANDING_APP_BUILD=2
 export STANDING_SPARKLE_FEED_URL="https://YOUR_HOST/appcast.xml"
 export STANDING_SPARKLE_PUBLIC_ED_KEY="YOUR_ED25519_PUBLIC_KEY"

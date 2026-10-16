@@ -20,17 +20,17 @@
     <language>en</language>
 
     <item>
-      <title>Version 0.2.0</title>
+      <title>Version 0.1.0</title>
       <pubDate>Thu, 15 Oct 2026 12:00:00 +0000</pubDate>
       <sparkle:version>2</sparkle:version>
-      <sparkle:shortVersionString>0.2.0</sparkle:shortVersionString>
+      <sparkle:shortVersionString>0.1.0</sparkle:shortVersionString>
       <description><![CDATA[
         <ul>
           <li>Bug fixes and improvements</li>
         </ul>
       ]]></description>
       <enclosure
-        url="https://github.com/YOU/standing/releases/download/v0.2.0/Standing.dmg"
+        url="https://github.com/YOU/standing/releases/download/v0.1.0/Standing.dmg"
         sparkle:edSignature="REPLACE_WITH_sign_update_OUTPUT"
         length="12345678"
         type="application/octet-stream"
