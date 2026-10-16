@@ -4,15 +4,44 @@
 #
 # Usage:
 #   ./scripts/package-app.sh              # dev: points at repo .venv
-#   ./scripts/package-app.sh --release    # ship: embeds src + relocatable CPython
+#   ./scripts/package-app.sh --release    # ship: host-arch Swift + bundled CPython
+#
+# Release builds ship a relocatable CPython under StandingPayload/python/ so
+# customers do not need Python installed. Build natively per arch (arm64 on
+# Apple Silicon, x86_64 on Intel) — GitHub Actions uses a matrix.
 #
 # Env:
 #   STANDING_APP_VERSION / STANDING_APP_BUILD
+#   STANDING_SHIP_ARCH   optional override (must match host: arm64|x86_64)
 #   STANDING_SPARKLE_FEED_URL / STANDING_SPARKLE_PUBLIC_ED_KEY
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
+
+HOST_ARCH="$(uname -m)"
+case "$HOST_ARCH" in
+  arm64|x86_64) ;;
+  *)
+    echo "Unsupported Mac arch: $HOST_ARCH" >&2
+    exit 1
+    ;;
+esac
+SHIP_ARCH="${STANDING_SHIP_ARCH:-$HOST_ARCH}"
+case "$SHIP_ARCH" in
+  arm64)
+    SHIP_PYTHON_REQUEST="cpython-3.12-macos-aarch64-none"
+    SHIP_UV_TAG="macos-aarch64"
+    ;;
+  x86_64)
+    SHIP_PYTHON_REQUEST="cpython-3.12-macos-x86_64-none"
+    SHIP_UV_TAG="macos-x86_64"
+    ;;
+  *)
+    echo "STANDING_SHIP_ARCH must be arm64 or x86_64 (got: $SHIP_ARCH)" >&2
+    exit 1
+    ;;
+esac
 
 ensure_uv() {
   if command -v uv >/dev/null 2>&1; then
@@ -25,6 +54,81 @@ ensure_uv() {
     echo "uv not found on PATH after install" >&2
     exit 1
   fi
+}
+
+resolve_symlink_chain() {
+  local path="$1"
+  local dir target
+  for _ in 1 2 3 4 5 6 7 8; do
+    if [[ ! -L "$path" ]]; then
+      printf '%s\n' "$path"
+      return 0
+    fi
+    dir="$(cd "$(dirname "$path")" && pwd)"
+    target="$(readlink "$path")"
+    if [[ "$target" != /* ]]; then
+      path="$dir/$target"
+    else
+      path="$target"
+    fi
+  done
+  printf '%s\n' "$path"
+}
+
+require_macho_arch() {
+  local bin="$1"
+  local want="$2"
+  local archs
+  if [[ ! -x "$bin" ]]; then
+    echo "Missing executable for arch check: $bin" >&2
+    exit 1
+  fi
+  archs="$(lipo -archs "$bin" 2>/dev/null || true)"
+  if [[ -z "$archs" ]]; then
+    echo "Not a Mach-O executable: $bin" >&2
+    exit 1
+  fi
+  case " $archs " in
+    *" $want "*) ;;
+    *)
+      echo "Expected $want Mach-O, got [$archs]: $bin" >&2
+      exit 1
+      ;;
+  esac
+}
+
+# Fail if the copied interpreter is a venv or a symlink to the builder's Python.
+# On CI, plain `uv python find 3.12` prefers the project .venv (setup-python).
+# That venv links to /Library/Frameworks — fine on the runner, broken elsewhere,
+# so the worker never starts and Save AI key stays disabled.
+assert_embedded_python() {
+  local payload="$1"
+  local py="$payload/python/bin/python3"
+  local path real_dir payload_dir
+
+  if [[ ! -e "$py" && ! -L "$py" ]]; then
+    py="$payload/python/bin/python3.12"
+  fi
+  if [[ -f "$payload/python/pyvenv.cfg" ]]; then
+    echo "Refusing to embed a virtualenv (pyvenv.cfg). Save AI key needs a relocatable CPython." >&2
+    exit 1
+  fi
+
+  path="$(resolve_symlink_chain "$py")"
+  if [[ -L "$path" || ! -x "$path" ]]; then
+    echo "Embedded Python did not resolve to an executable: $py" >&2
+    exit 1
+  fi
+  real_dir="$(cd "$(dirname "$path")" && pwd)"
+  payload_dir="$(cd "$payload/python" && pwd)"
+  case "$real_dir/" in
+    "$payload_dir"/*) ;;
+    *)
+      echo "Embedded Python resolves outside the app: $path" >&2
+      exit 1
+      ;;
+  esac
+  require_macho_arch "$path" "$SHIP_ARCH"
 }
 
 # Drop tooling / tests / GUI stdlib that the worker never imports.
@@ -105,36 +209,39 @@ fi
 
 NATIVE="$ROOT/native/Standing"
 APP="$NATIVE/Standing.app"
-BIN_DIR="$NATIVE/.build/arm64-apple-macosx/release"
-if [[ ! -d "$BIN_DIR" ]]; then
-  BIN_DIR="$NATIVE/.build/x86_64-apple-macosx/release"
-fi
+BIN_DIR="$NATIVE/.build/${SHIP_ARCH}-apple-macosx/release"
 
 APP_VERSION="${STANDING_APP_VERSION:-0.2.0}"
 APP_BUILD="${STANDING_APP_BUILD:-1}"
 SPARKLE_FEED_URL="${STANDING_SPARKLE_FEED_URL:-}"
 SPARKLE_PUBLIC_ED_KEY="${STANDING_SPARKLE_PUBLIC_ED_KEY:-}"
 
-echo "Building Standing (release, version $APP_VERSION build $APP_BUILD, mode=$MODE)…" >&2
+if [[ "$MODE" == "release" && "$SHIP_ARCH" != "$HOST_ARCH" ]]; then
+  echo "Release packaging must run on a $SHIP_ARCH Mac (host is $HOST_ARCH)." >&2
+  echo "Cross-arch OpenCV/NumPy wheels are not supported — use the CI matrix." >&2
+  exit 1
+fi
+
+echo "Building Standing (release, version $APP_VERSION build $APP_BUILD, mode=$MODE, arch=$SHIP_ARCH)…" >&2
 # Keep stdout clean: callers capture the final app path only.
 (
   cd "$NATIVE"
-  swift build -c release
+  # Thin binary matching the bundled CPython for this arch.
+  swift build -c release --arch "$SHIP_ARCH"
 ) >&2
 
 if [[ ! -x "$BIN_DIR/Standing" ]]; then
-  BIN_DIR="$(echo "$NATIVE"/.build/*-apple-macosx/release)"
-fi
-if [[ ! -x "$BIN_DIR/Standing" ]]; then
-  echo "Could not find built Standing binary under $NATIVE/.build" >&2
+  echo "Could not find $SHIP_ARCH Standing binary at $BIN_DIR/Standing" >&2
   exit 1
 fi
+require_macho_arch "$BIN_DIR/Standing" "$SHIP_ARCH"
 
 echo "Packaging Standing.app…" >&2
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" "$APP/Contents/Frameworks"
 cp "$BIN_DIR/Standing" "$APP/Contents/MacOS/Standing"
 chmod +x "$APP/Contents/MacOS/Standing"
+require_macho_arch "$APP/Contents/MacOS/Standing" "$SHIP_ARCH"
 
 # App icon (notifications, Finder, Dock) — built from the web brand mark.
 ICON_SRC="$ROOT/web/icons/icon-512.png"
@@ -231,14 +338,20 @@ else
     rsync -a "$ROOT/assets/icons" "$PAYLOAD/assets/"
   fi
 
-  # Embed a relocatable CPython (python-build-standalone via uv).
-  # A normal `python3 -m venv` only symlinks to /Library/Frameworks or the
-  # builder's toolchain — that breaks on other Macs and makes Save AI key crash.
-  echo "Embedding relocatable Python runtime (this can take a few minutes)…" >&2
+  # Embed a relocatable CPython for this arch (python-build-standalone via uv).
+  # Customers do not need Python installed. Never copy the CI/dev .venv.
+  echo "Embedding relocatable $SHIP_ARCH Python ($SHIP_PYTHON_REQUEST)…" >&2
   ensure_uv
-  uv python install 3.12 >&2
-  UV_PY="$(uv python find 3.12)"
+  uv python install "$SHIP_PYTHON_REQUEST" >&2
+  UV_PY="$(uv python find "$SHIP_PYTHON_REQUEST" --managed-python --no-project)"
   STANDALONE_ROOT="$(cd "$(dirname "$UV_PY")/.." && pwd)"
+  case "$STANDALONE_ROOT" in
+    *"$SHIP_UV_TAG"*) ;;
+    *)
+      echo "Expected a $SHIP_UV_TAG standalone tree, got: $STANDALONE_ROOT" >&2
+      exit 1
+      ;;
+  esac
   echo "  source: $STANDALONE_ROOT" >&2
   mkdir -p "$PAYLOAD/python"
   # Copy standalone tree; drop obvious dead weight before pip install.
@@ -260,17 +373,18 @@ else
     --exclude 'lib/python3.*/lib2to3' \
     --exclude 'lib/python3.*/config-*' \
     "$STANDALONE_ROOT/" "$PAYLOAD/python/"
+  assert_embedded_python "$PAYLOAD"
   EMBED_PY="$PAYLOAD/python/bin/python3"
-  if [[ ! -x "$EMBED_PY" ]]; then
+  if [[ ! -e "$EMBED_PY" && ! -L "$EMBED_PY" ]]; then
     EMBED_PY="$PAYLOAD/python/bin/python3.12"
   fi
-  if [[ ! -x "$EMBED_PY" ]]; then
+  if [[ ! -e "$EMBED_PY" && ! -L "$EMBED_PY" ]]; then
     echo "Embedded Python missing at $PAYLOAD/python/bin" >&2
     exit 1
   fi
   # This is our private copy — remove uv's PEP 668 marker so pip can install deps.
   find "$PAYLOAD/python" -name EXTERNALLY-MANAGED -delete
-  # Install worker deps only (no rumps/PyObjC).
+  # Install worker deps only (no rumps/PyObjC). Wheels match the build host arch.
   "$EMBED_PY" -m ensurepip --upgrade >/dev/null 2>&1 || true
   "$EMBED_PY" -m pip install --upgrade --no-cache-dir pip >&2
   "$EMBED_PY" -m pip install --no-cache-dir -r "$PAYLOAD/requirements.txt" >&2
@@ -279,10 +393,12 @@ else
   slim_embedded_python "$PAYLOAD/python"
   AFTER_BYTES="$(du -sk "$PAYLOAD/python" | awk '{print $1}')"
   echo "  embedded python: $((BEFORE_BYTES / 1024))M → $((AFTER_BYTES / 1024))M" >&2
-  # Prove the runtime is self-contained (no dangling Framework symlink).
+  # Re-check after slim: still inside the app, correct arch, imports work.
+  assert_embedded_python "$PAYLOAD"
+  printf '%s\n' "$SHIP_ARCH" >"$PAYLOAD/SHIP_ARCH"
   (
     cd "$PAYLOAD"
-    "$EMBED_PY" -c "import keyring, cv2, dotenv, numpy, PIL, typesafe_sdk; print('embedded imports ok')"
+    "$EMBED_PY" -c "import platform, keyring, cv2, dotenv, numpy, PIL, typesafe_sdk; assert platform.machine() == '${SHIP_ARCH}', platform.machine(); print('embedded imports ok', platform.machine())"
   ) >&2
 
   LS_ENVIRONMENT=$(cat <<EOF

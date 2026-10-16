@@ -50,26 +50,10 @@ echo "  app ok: $APP"
 # Skip with STANDING_SKIP_RELEASE_SMOKE=1 (faster local loops).
 if [[ "${STANDING_SKIP_RELEASE_SMOKE:-0}" != "1" && "${STANDING_CI_RELEASE_SMOKE:-0}" == "1" ]]; then
   echo "==> Package Standing.app (release smoke)"
+  HOST_ARCH="$(uname -m)"
+  export STANDING_SHIP_ARCH="${STANDING_SHIP_ARCH:-$HOST_ARCH}"
   REL_APP="$("$ROOT/scripts/package-app.sh" --release | tail -n1)"
-  EMBED_PY="$REL_APP/Contents/Resources/StandingPayload/python/bin/python3"
-  if [[ ! -x "$EMBED_PY" ]]; then
-    EMBED_PY="$REL_APP/Contents/Resources/StandingPayload/python/bin/python3.12"
-  fi
-  test -x "$EMBED_PY"
-  # Must not be a dangling symlink into /Library/Frameworks.
-  if [[ -L "$EMBED_PY" ]]; then
-    TARGET="$(readlink "$EMBED_PY")"
-    case "$TARGET" in
-      /Library/Frameworks/*|/usr/local/*)
-        echo "Embedded python still points at host toolchain: $TARGET" >&2
-        exit 1
-        ;;
-    esac
-  fi
-  (
-    cd "$REL_APP/Contents/Resources/StandingPayload"
-    "$EMBED_PY" -c "import keyring, cv2, dotenv; print('  release embed ok')"
-  )
+  "$ROOT/scripts/verify-release-payload.sh" "$REL_APP" "$STANDING_SHIP_ARCH"
 fi
 
 echo "==> Wrap DMG (from existing app)"

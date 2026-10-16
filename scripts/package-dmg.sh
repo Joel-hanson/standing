@@ -7,7 +7,9 @@
 #
 # Env:
 #   STANDING_APP_VERSION / STANDING_APP_BUILD (passed through to package-app)
-#   STANDING_DMG_PATH   optional output path (default: dist/Standing-<version>.dmg)
+#   STANDING_SHIP_ARCH  arch tag in the default filename (default: host)
+#   STANDING_DMG_PATH   optional output path
+#                       (default: dist/Standing-<version>-<arch>.dmg)
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -18,7 +20,7 @@ for arg in "$@"; do
   case "$arg" in
     --skip-build) SKIP_BUILD=1 ;;
     -h|--help)
-      sed -n '2,12p' "$0"
+      sed -n '2,14p' "$0"
       exit 0
       ;;
     *)
@@ -31,7 +33,8 @@ done
 APP_VERSION="${STANDING_APP_VERSION:-0.2.0}"
 APP="$ROOT/native/Standing/Standing.app"
 DIST="$ROOT/dist"
-DMG_PATH="${STANDING_DMG_PATH:-$DIST/Standing-${APP_VERSION}.dmg}"
+SHIP_ARCH="${STANDING_SHIP_ARCH:-$(uname -m)}"
+DMG_PATH="${STANDING_DMG_PATH:-$DIST/Standing-${APP_VERSION}-${SHIP_ARCH}.dmg}"
 STAGE="$DIST/dmg-stage"
 
 if [[ "$SKIP_BUILD" -eq 0 ]]; then
@@ -42,6 +45,14 @@ fi
 if [[ ! -d "$APP" ]]; then
   echo "Missing Standing.app at $APP — run scripts/package-app.sh --release first." >&2
   exit 1
+fi
+
+# Prefer arch marker written by package-app --release when present.
+if [[ -f "$APP/Contents/Resources/StandingPayload/SHIP_ARCH" ]]; then
+  SHIP_ARCH="$(tr -d '[:space:]' <"$APP/Contents/Resources/StandingPayload/SHIP_ARCH")"
+  if [[ -z "${STANDING_DMG_PATH:-}" ]]; then
+    DMG_PATH="$DIST/Standing-${APP_VERSION}-${SHIP_ARCH}.dmg"
+  fi
 fi
 
 mkdir -p "$DIST"

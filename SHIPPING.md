@@ -52,14 +52,25 @@ export STANDING_APP_BUILD=2
 ./scripts/package-dmg.sh   # → dist/Standing-0.2.0.dmg
 ```
 
-`package-app.sh --release` embeds worker `src/` plus a **relocatable** CPython
-(via `uv python` / python-build-standalone) under
-`Standing.app/Contents/Resources/StandingPayload/python/`, installing
-`requirements-release.txt` (no rumps/PyObjC) and stripping tests/pip/unused
-stdlib (never `.env` or local data). Do not ship a host `.venv` — those
-symlinks break on other Macs and the Swift shell then falls back to system
-Python, so Save AI key fails. Dev builds (`./scripts/run-native.sh`) still
-point at the repo `.venv` + full `requirements.txt`.
+**Multi-arch DMGs (native per CPU).** GitHub Actions builds two release
+artifacts on matching runners:
+
+| Arch | Runner | Asset |
+| --- | --- | --- |
+| Apple Silicon | `macos-15` | `Standing-<ver>-arm64.dmg` (+ legacy `Standing-<ver>.dmg`) |
+| Intel | `macos-15-intel` | `Standing-<ver>-x86_64.dmg` |
+
+Each build runs `swift build --arch <host>` and embeds a relocatable CPython
+via `uv` (`cpython-3.12-macos-aarch64-none` or `…-x86_64-none`) under
+`Standing.app/Contents/Resources/StandingPayload/python/`. Customers do not
+need Python installed. Packaging refuses virtualenvs and host-Framework
+symlinks so Save AI key cannot ship broken again. Cross-compiling from one
+Mac to the other is not supported (OpenCV/NumPy wheels must match the host).
+
+Also installs `requirements-release.txt` (no rumps/PyObjC) and strips
+tests/pip/unused stdlib (never `.env` or local data). Dev builds
+(`./scripts/run-native.sh`) still point at the repo `.venv` + full
+`requirements.txt`.
 
 Manual Apple steps (or let CI do them — see below):
 1. Apple Developer ID certificate
@@ -68,14 +79,15 @@ Manual Apple steps (or let CI do them — see below):
 
 ## GitHub Actions CI (macOS smoke)
 
-Every push to `main` and every PR runs [`.github/workflows/ci.yml`](.github/workflows/ci.yml) on `macos-14`:
+Every push to `main` and every PR runs [`.github/workflows/ci.yml`](.github/workflows/ci.yml) on a matrix:
 
-1. Install Python deps into `.venv`
-2. Import core modules (`src.core`, `src.worker`, …)
-3. `package-app.sh` → verify `Standing.app` layout
-4. Wrap a DMG and mount it to confirm the app is inside
+- `macos-15` (arm64)
+- `macos-15-intel` (x86_64)
 
-Locally: `./scripts/ci-smoke.sh`
+Each job: install deps → import core modules → `package-app.sh` (dev) → wrap/mount a DMG.
+
+Locally: `./scripts/ci-smoke.sh` (host arch). Release-embed smoke:
+`STANDING_CI_RELEASE_SMOKE=1 ./scripts/ci-smoke.sh`.
 
 ## GitHub Actions release
 
@@ -90,7 +102,7 @@ Workflow: [`.github/workflows/release.yml`](.github/workflows/release.yml)
 
 | Step | What it does |
 | --- | --- |
-| Build | `package-dmg.sh` on `macos-14` (Swift shell + embedded Python) |
+| Build | Matrix: `macos-15` (arm64) + `macos-15-intel` (x86_64) |
 | Sign / notary | If Apple secrets are set — otherwise uploads an unsigned DMG |
 | Sparkle | If `SPARKLE_PRIVATE_ED_KEY` is set — attaches `appcast.xml` |
 | Publish | Creates a GitHub Release with the DMG (+ appcast when present) |

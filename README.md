@@ -4,6 +4,8 @@
 
 Watches your webcam, decides sit vs stand, and nudges you when one posture lasts too long. Motion-gated locally; only sends a small JPEG to [Jev](https://docs.typesafe.ai/images) when a new check is worthwhile.
 
+**DMG downloads** ship per Mac CPU (`arm64` and `x86_64`), each with its own Python runtime — you do not need Python installed.
+
 ## Setup
 
 ```bash

@@ -1,5 +1,5 @@
 # Build + smoke-test Standing on macOS for every push / PR.
-# Does not publish a release (see release.yml for tags).
+# Matrix covers Apple Silicon and Intel. Does not publish (see release.yml).
 
 name: CI
 
@@ -18,13 +18,28 @@ permissions:
 
 jobs:
   macos:
-    name: macOS smoke
-    runs-on: macos-14
-    timeout-minutes: 45
+    name: macOS smoke (${{ matrix.arch }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: arm64
+            os: macos-15
+          - arch: x86_64
+            os: macos-15-intel
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Confirm runner arch
+        run: |
+          set -euo pipefail
+          HOST="$(uname -m)"
+          echo "host=$HOST expected=${{ matrix.arch }}"
+          test "$HOST" = "${{ matrix.arch }}"
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -39,4 +54,9 @@ jobs:
           .venv/bin/pip install -r requirements.txt
 
       - name: Smoke (imports, Standing.app, DMG)
+        env:
+          STANDING_SHIP_ARCH: ${{ matrix.arch }}
+          # Full release embed is expensive; CI packs a thin release on schedule /
+          # release.yml. Dev smoke is enough for every PR.
+          STANDING_CI_RELEASE_SMOKE: "0"
         run: ./scripts/ci-smoke.sh

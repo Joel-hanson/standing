@@ -319,16 +319,22 @@ final class PythonBridge: ObservableObject {
         if let env = ProcessInfo.processInfo.environment["STANDING_PYTHON"], !env.isEmpty {
             return URL(fileURLWithPath: env)
         }
-        // Prefer a real executable (broken venv symlinks must not win).
+        // Release DMG: prefer the arm64 CPython copied into StandingPayload.
+        // Dev: repo .venv. Never trust a dangling Framework symlink.
         let candidates = [
-            repoRoot.appendingPathComponent(".venv/bin/python3"),
             repoRoot.appendingPathComponent("python/bin/python3"),
             repoRoot.appendingPathComponent("python/bin/python3.12"),
+            repoRoot.appendingPathComponent(".venv/bin/python3"),
         ]
         for url in candidates {
             if let resolved = usablePython(at: url) {
                 return resolved
             }
+        }
+        // Inside a shipped .app, do not fall back to system Python — that hides
+        // a broken embed and leaves Save AI key disabled with a vague error.
+        if runningInsideAppBundle {
+            return repoRoot.appendingPathComponent("python/bin/python3")
         }
         return URL(fileURLWithPath: "/usr/bin/python3")
     }

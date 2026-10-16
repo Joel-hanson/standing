@@ -1,8 +1,14 @@
-# Tag a version → build Standing.app → DMG → GitHub Release.
+# Tag a version → build Standing.app per arch → DMG → GitHub Release.
 #
 #   git tag v0.2.0 && git push origin v0.2.0
 #
-# Without Apple secrets: uploads an unsigned (ad-hoc) DMG — fine for testing,
+# Matrix:
+#   arm64   → macos-15           → Standing-<ver>-arm64.dmg
+#   x86_64  → macos-15-intel     → Standing-<ver>-x86_64.dmg
+#
+# Also uploads Standing-<ver>.dmg as a copy of the arm64 build for older links.
+#
+# Without Apple secrets: uploads unsigned (ad-hoc) DMGs — fine for testing,
 # Gatekeeper will warn on other Macs.
 #
 # With secrets (Settings → Secrets and variables → Actions):
@@ -36,10 +42,12 @@ permissions:
   contents: write
 
 jobs:
-  release:
-    runs-on: macos-14
-    timeout-minutes: 90
-
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.ver.outputs.version }}
+      build: ${{ steps.ver.outputs.build }}
+      tag: ${{ steps.ver.outputs.tag }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -55,7 +63,6 @@ jobs:
           else
             TAG="${GITHUB_REF_NAME}"
             VERSION="${TAG#v}"
-            # Build number = commits on main (stable-ish) unless overridden later.
             BUILD="$(git rev-list --count HEAD)"
           fi
           if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-].*)?$ ]]; then
@@ -66,6 +73,30 @@ jobs:
           echo "build=$BUILD" >> "$GITHUB_OUTPUT"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "Resolved $TAG (version=$VERSION build=$BUILD)"
+
+  package:
+    name: Package ${{ matrix.arch }}
+    needs: version
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: arm64
+            os: macos-15
+          - arch: x86_64
+            os: macos-15-intel
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Confirm runner arch
+        run: |
+          set -euo pipefail
+          HOST="$(uname -m)"
+          echo "host=$HOST expected=${{ matrix.arch }}"
+          test "$HOST" = "${{ matrix.arch }}"
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -123,33 +154,26 @@ jobs:
 
       - name: Package DMG
         env:
-          STANDING_APP_VERSION: ${{ steps.ver.outputs.version }}
-          STANDING_APP_BUILD: ${{ steps.ver.outputs.build }}
+          STANDING_APP_VERSION: ${{ needs.version.outputs.version }}
+          STANDING_APP_BUILD: ${{ needs.version.outputs.build }}
+          STANDING_SHIP_ARCH: ${{ matrix.arch }}
           STANDING_SPARKLE_FEED_URL: ${{ secrets.STANDING_SPARKLE_FEED_URL }}
           STANDING_SPARKLE_PUBLIC_ED_KEY: ${{ secrets.STANDING_SPARKLE_PUBLIC_ED_KEY }}
         run: |
           set -euo pipefail
+          chmod +x scripts/verify-release-payload.sh
           DMG="$(./scripts/package-dmg.sh)"
           echo "DMG_PATH=$DMG" >> "$GITHUB_ENV"
           ls -lh "$DMG"
-          # Guard against shipping a broken host-Framework Python symlink.
-          # Use absolute paths: the check cds into StandingPayload, so a
-          # repo-relative EMBED_PY would resolve incorrectly after cd.
-          PAYLOAD="$(pwd)/native/Standing/Standing.app/Contents/Resources/StandingPayload"
-          EMBED_PY="$PAYLOAD/python/bin/python3"
-          if [[ ! -x "$EMBED_PY" ]]; then
-            EMBED_PY="$PAYLOAD/python/bin/python3.12"
-          fi
-          test -x "$EMBED_PY"
-          (
-            cd "$PAYLOAD"
-            "$EMBED_PY" -c "import keyring, cv2, dotenv; print('embedded python ok')"
-          )
+          APP="$(pwd)/native/Standing/Standing.app"
+          ./scripts/verify-release-payload.sh "$APP" "${{ matrix.arch }}"
 
       - name: Codesign app + DMG
         if: steps.cert.outputs.signing == 'true'
         env:
           IDENTITY: ${{ steps.cert.outputs.identity }}
+          VERSION: ${{ needs.version.outputs.version }}
+          ARCH: ${{ matrix.arch }}
         run: |
           set -euo pipefail
           APP="native/Standing/Standing.app"
@@ -174,7 +198,6 @@ jobs:
           )
           PY
 
-          # Sign nested Mach-O deepest-first, then frameworks, then the app.
           while IFS= read -r -d '' bin; do
             codesign --force --options runtime --timestamp \
               --sign "$IDENTITY" "$bin" || true
@@ -192,10 +215,9 @@ jobs:
             --sign "$IDENTITY" --entitlements "$ENTITLEMENTS" "$APP"
           codesign --verify --verbose=2 "$APP"
 
-          # Rebuild DMG from the signed app, then sign the disk image.
-          STANDING_APP_VERSION="${{ steps.ver.outputs.version }}" \
+          STANDING_APP_VERSION="$VERSION" STANDING_SHIP_ARCH="$ARCH" \
             ./scripts/package-dmg.sh --skip-build
-          DMG="dist/Standing-${{ steps.ver.outputs.version }}.dmg"
+          DMG="dist/Standing-${VERSION}-${ARCH}.dmg"
           codesign --force --timestamp --sign "$IDENTITY" "$DMG"
           codesign --verify --verbose=2 "$DMG"
           echo "DMG_PATH=$DMG" >> "$GITHUB_ENV"
@@ -225,89 +247,211 @@ jobs:
         id: sparkle
         env:
           SPARKLE_PRIVATE_ED_KEY: ${{ secrets.SPARKLE_PRIVATE_ED_KEY }}
+          ARCH: ${{ matrix.arch }}
         run: |
           set -euo pipefail
+          mkdir -p dist
+          META="dist/sparkle-${ARCH}.json"
           if [[ -z "${SPARKLE_PRIVATE_ED_KEY:-}" ]]; then
             echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo '{"enabled":false}' > "$META"
             exit 0
           fi
           SIGN_UPDATE="$(find native/Standing/.build -path '*/bin/sign_update' -type f 2>/dev/null | head -1 || true)"
           if [[ -z "$SIGN_UPDATE" ]]; then
             echo "sign_update not found under .build — skip Sparkle signature."
             echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo '{"enabled":false}' > "$META"
             exit 0
           fi
           KEY_FILE="$RUNNER_TEMP/sparkle_ed_key"
           printf '%s' "$SPARKLE_PRIVATE_ED_KEY" > "$KEY_FILE"
-          # sign_update prints: sparkle:edSignature="..." length="..."
           OUT="$("$SIGN_UPDATE" "$DMG_PATH" -f "$KEY_FILE")"
           echo "$OUT"
           SIG="$(echo "$OUT" | sed -n 's/.*edSignature="\([^"]*\)".*/\1/p')"
           LEN="$(echo "$OUT" | sed -n 's/.*length="\([^"]*\)".*/\1/p')"
           if [[ -z "$SIG" || -z "$LEN" ]]; then
-            # Newer sparkle may print "signature length" on two lines
             SIG="$(echo "$OUT" | awk '/^[[:alnum:]+\/=]+$/{print; exit}')"
             LEN="$(stat -f%z "$DMG_PATH")"
           fi
           echo "enabled=true" >> "$GITHUB_OUTPUT"
-          echo "signature=$SIG" >> "$GITHUB_OUTPUT"
-          echo "length=$LEN" >> "$GITHUB_OUTPUT"
+          ARCH="$ARCH" SIG="$SIG" LEN="$LEN" DMG_PATH="$DMG_PATH" META="$META" python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          Path(os.environ["META"]).write_text(json.dumps({
+              "enabled": True,
+              "arch": os.environ["ARCH"],
+              "signature": os.environ["SIG"],
+              "length": os.environ["LEN"],
+              "dmg": Path(os.environ["DMG_PATH"]).name,
+          }, indent=2))
+          PY
           rm -f "$KEY_FILE"
 
-      - name: Generate appcast item
-        if: steps.sparkle.outputs.enabled == 'true'
+      - name: Alias arm64 DMG for legacy download URL
+        if: matrix.arch == 'arm64'
         env:
-          VERSION: ${{ steps.ver.outputs.version }}
-          BUILD: ${{ steps.ver.outputs.build }}
-          SIG: ${{ steps.sparkle.outputs.signature }}
-          LEN: ${{ steps.sparkle.outputs.length }}
-          REPO: ${{ github.repository }}
-          TAG: ${{ steps.ver.outputs.tag }}
+          VERSION: ${{ needs.version.outputs.version }}
         run: |
           set -euo pipefail
-          export PUBDATE
-          PUBDATE="$(date -u '+%a, %d %b %Y %H:%M:%S +0000')"
-          export URL="https://github.com/${REPO}/releases/download/${TAG}/Standing-${VERSION}.dmg"
+          cp "$DMG_PATH" "dist/Standing-${VERSION}.dmg"
+          ls -lh "dist/Standing-${VERSION}.dmg"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: standing-${{ matrix.arch }}
+          path: |
+            dist/Standing-${{ needs.version.outputs.version }}-${{ matrix.arch }}.dmg
+            dist/sparkle-${{ matrix.arch }}.json
+          if-no-files-found: error
+
+      - name: Upload legacy arm64 alias
+        if: matrix.arch == 'arm64'
+        uses: actions/upload-artifact@v4
+        with:
+          name: standing-arm64-legacy
+          path: dist/Standing-${{ needs.version.outputs.version }}.dmg
+          if-no-files-found: error
+
+  publish:
+    name: Publish GitHub Release
+    needs: [version, package]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download arch artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: standing-*
+          path: dist/artifacts
+          merge-multiple: true
+
+      - name: Assemble release files + appcast
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+          BUILD: ${{ needs.version.outputs.build }}
+          TAG: ${{ needs.version.outputs.tag }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
           mkdir -p dist
+          # Flatten downloaded DMGs / JSON into dist/
+          find dist/artifacts -type f \( -name '*.dmg' -o -name 'sparkle-*.json' \) -exec cp {} dist/ \;
+          ls -lh dist/*.dmg dist/sparkle-*.json 2>/dev/null || ls -lhR dist
+
+          test -f "dist/Standing-${VERSION}-arm64.dmg"
+          test -f "dist/Standing-${VERSION}-x86_64.dmg"
+          # Legacy URL without arch suffix (Apple Silicon).
+          if [[ ! -f "dist/Standing-${VERSION}.dmg" ]]; then
+            cp "dist/Standing-${VERSION}-arm64.dmg" "dist/Standing-${VERSION}.dmg"
+          fi
+
           python3 - <<'PY'
-          from pathlib import Path
+          import json
           import os
-          item = f"""<item>
-            <title>Version {os.environ['VERSION']}</title>
-            <pubDate>{os.environ['PUBDATE']}</pubDate>
-            <sparkle:version>{os.environ['BUILD']}</sparkle:version>
-            <sparkle:shortVersionString>{os.environ['VERSION']}</sparkle:shortVersionString>
-            <enclosure
-              url="{os.environ['URL']}"
-              sparkle:edSignature="{os.environ['SIG']}"
-              length="{os.environ['LEN']}"
+          from datetime import datetime, timezone
+          from pathlib import Path
+
+          version = os.environ["VERSION"]
+          build = os.environ["BUILD"]
+          tag = os.environ["TAG"]
+          repo = os.environ["REPO"]
+          pubdate = datetime.now(timezone.utc).strftime("%a, %d %b %Y %H:%M:%S +0000")
+          dist = Path("dist")
+
+          enclosures = []
+          for arch in ("arm64", "x86_64"):
+              meta_path = dist / f"sparkle-{arch}.json"
+              dmg_name = f"Standing-{version}-{arch}.dmg"
+              dmg = dist / dmg_name
+              if not dmg.is_file():
+                  raise SystemExit(f"missing {dmg}")
+              meta = {"enabled": False}
+              if meta_path.is_file():
+                  meta = json.loads(meta_path.read_text())
+              url = f"https://github.com/{repo}/releases/download/{tag}/{dmg_name}"
+              if meta.get("enabled") and meta.get("signature") and meta.get("length"):
+                  enclosures.append(
+                      f"""    <enclosure
+              url="{url}"
+              sparkle:edSignature="{meta['signature']}"
+              sparkle:version="{build}"
+              sparkle:shortVersionString="{version}"
+              sparkle:os="macos"
+              sparkle:arch="{arch}"
+              length="{meta['length']}"
               type="application/octet-stream"
-            />
+            />"""
+                  )
+              else:
+                  # Unsigned / no Sparkle key — still document the asset in release notes body.
+                  print(f"Sparkle skipped for {arch}", flush=True)
+
+          # Legacy enclosure (arm64, no arch attribute) when signed.
+          arm_meta_path = dist / "sparkle-arm64.json"
+          if arm_meta_path.is_file():
+              arm = json.loads(arm_meta_path.read_text())
+              if arm.get("enabled") and arm.get("signature") and arm.get("length"):
+                  legacy = f"Standing-{version}.dmg"
+                  enclosures.insert(
+                      0,
+                      f"""    <enclosure
+              url="https://github.com/{repo}/releases/download/{tag}/{legacy}"
+              sparkle:edSignature="{arm['signature']}"
+              sparkle:version="{build}"
+              sparkle:shortVersionString="{version}"
+              sparkle:os="macos"
+              length="{arm['length']}"
+              type="application/octet-stream"
+            />""",
+                  )
+
+          if enclosures:
+              item = f"""  <item>
+            <title>Version {version}</title>
+            <pubDate>{pubdate}</pubDate>
+            <sparkle:version>{build}</sparkle:version>
+            <sparkle:shortVersionString>{version}</sparkle:shortVersionString>
+          {chr(10).join(enclosures)}
           </item>
           """
-          Path("dist/appcast-item.xml").write_text(item)
-          Path("dist/appcast.xml").write_text(
-              '<?xml version="1.0" encoding="utf-8"?>\n'
-              '<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">\n'
-              '  <channel>\n'
-              '    <title>Standing</title>\n'
-              '    <language>en</language>\n'
-              f'{item}'
-              '  </channel>\n'
-              '</rss>\n'
-          )
+              (dist / "appcast-item.xml").write_text(item)
+              (dist / "appcast.xml").write_text(
+                  '<?xml version="1.0" encoding="utf-8"?>\n'
+                  '<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">\n'
+                  '  <channel>\n'
+                  '    <title>Standing</title>\n'
+                  '    <language>en</language>\n'
+                  f'{item}'
+                  '  </channel>\n'
+                  '</rss>\n'
+              )
+              print("Wrote appcast.xml")
+          else:
+              print("No Sparkle signatures — skipping appcast.xml")
           PY
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.ver.outputs.tag }}
-          name: Standing ${{ steps.ver.outputs.version }}
+          tag_name: ${{ needs.version.outputs.tag }}
+          name: Standing ${{ needs.version.outputs.version }}
           draft: false
           generate_release_notes: true
           fail_on_unmatched_files: false
+          body: |
+            ## Downloads
+            - **Apple Silicon (arm64):** `Standing-${{ needs.version.outputs.version }}-arm64.dmg` (also `Standing-${{ needs.version.outputs.version }}.dmg`)
+            - **Intel (x86_64):** `Standing-${{ needs.version.outputs.version }}-x86_64.dmg`
+
+            Each DMG embeds a matching relocatable Python runtime — no Python install required.
           files: |
-            ${{ env.DMG_PATH }}
+            dist/Standing-${{ needs.version.outputs.version }}-arm64.dmg
+            dist/Standing-${{ needs.version.outputs.version }}-x86_64.dmg
+            dist/Standing-${{ needs.version.outputs.version }}.dmg
             dist/appcast.xml
             dist/appcast-item.xml
         env:
