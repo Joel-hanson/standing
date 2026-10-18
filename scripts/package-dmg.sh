@@ -30,7 +30,7 @@ for arg in "$@"; do
   esac
 done
 
-APP_VERSION="${STANDING_APP_VERSION:-0.1.0}"
+APP_VERSION="${STANDING_APP_VERSION:-0.2.0}"
 APP="$ROOT/native/Standing/Standing.app"
 DIST="$ROOT/dist"
 SHIP_ARCH="${STANDING_SHIP_ARCH:-$(uname -m)}"

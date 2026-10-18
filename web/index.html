@@ -7,7 +7,7 @@
     <title>Standing — desk posture tracker for macOS</title>
     <meta
       name="description"
-      content="Quiet menu bar app for Mac that watches your desk posture and nudges you when you’ve sat too long."
+      content="Quiet menu bar app for Mac that watches your desk posture and nudges you when you've sat too long."
     />
     <link rel="canonical" href="https://joelhanson.com/standing/" />
     <base href="/standing/" />
@@ -492,6 +492,38 @@
         color: var(--text-secondary);
       }
 
+      .install-cli {
+        margin-top: 0.85rem;
+        padding-top: 0.85rem;
+        border-top: 1px solid var(--line);
+      }
+
+      .install-cli p {
+        color: var(--muted);
+        font-size: 0.85rem;
+        line-height: 1.45;
+        margin-bottom: 0.5rem;
+      }
+
+      .install-cli code,
+      .install-cli pre {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        font-size: 0.78rem;
+      }
+
+      .install-cli pre {
+        margin: 0;
+        padding: 0.65rem 0.8rem;
+        background: var(--bg-elevated);
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        color: var(--text-secondary);
+        overflow-x: auto;
+        line-height: 1.45;
+        -webkit-user-select: all;
+        user-select: all;
+      }
+
       .install-note {
         margin-top: 0.75rem;
         color: var(--muted);
@@ -607,7 +639,7 @@
       <header class="hero content">
         <h1 class="brand">Standing</h1>
         <p class="lede">
-          A quiet macOS menu bar app that watches your desk posture and nudges you when you’ve sat too long.
+          A quiet macOS menu bar app that watches your desk posture and nudges you when you've sat too long.
         </p>
         <p class="tagline">Webcam checks sit vs stand. No timer guessing.</p>
         <div class="cta">
@@ -647,7 +679,7 @@
 
       <section class="how" aria-labelledby="how-title">
         <h2 id="how-title">Inside the app</h2>
-        <p class="how-lede">Menu, activity, and settings — what you’ll see day to day.</p>
+        <p class="how-lede">Menu, activity, and settings — what you'll see day to day.</p>
 
         <!-- Menu: alternate sides so labels never stack on top of each other -->
         <figure class="board board-menu">
@@ -675,7 +707,7 @@
               src="screenshots/menu.png"
               width="668"
               height="478"
-              alt="Standing menu — status, today’s stand time, and tracking controls"
+              alt="Standing menu — status, today's stand time, and tracking controls"
             />
           </div>
 
@@ -722,7 +754,7 @@
         <figure class="board board-activity">
           <div class="board-side board-side-left">
             <p class="note" style="--y: 12%">
-              <strong>Today’s summary</strong>
+              <strong>Today's summary</strong>
               <span>Status, stand-ups, and sit vs stand time.</span>
               <svg class="arrow" viewBox="0 0 48 32" aria-hidden="true">
                 <path d="M2 20 C 16 20, 28 10, 42 12" />
@@ -731,7 +763,7 @@
             </p>
             <p class="note" style="--y: 62%">
               <strong>Recent days</strong>
-              <span>Scroll the week’s stand-ups and totals.</span>
+              <span>Scroll the week's stand-ups and totals.</span>
               <svg class="arrow" viewBox="0 0 48 32" aria-hidden="true">
                 <path d="M2 12 C 16 12, 28 20, 42 18" />
                 <polygon points="42,18 33,12 35,24" />
@@ -744,7 +776,7 @@
               src="screenshots/activity.png"
               width="797"
               height="1024"
-              alt="Standing Activity — today’s summary, weekly stand/sit chart, and recent days"
+              alt="Standing Activity — today's summary, weekly stand/sit chart, and recent days"
             />
           </div>
 
@@ -761,7 +793,7 @@
 
           <ol class="notes-stack">
             <li>
-              <strong>Today’s summary</strong>
+              <strong>Today's summary</strong>
               <span>Status, stand-ups, and sit vs stand time.</span>
             </li>
             <li>
@@ -770,7 +802,7 @@
             </li>
             <li>
               <strong>Recent days</strong>
-              <span>Scroll the week’s stand-ups and totals.</span>
+              <span>Scroll the week's stand-ups and totals.</span>
             </li>
           </ol>
         </figure>
@@ -853,7 +885,7 @@
           </li>
           <li>
             <h3>Gentle standing nudges</h3>
-            <p>macOS notifications after you’ve sat or stood too long, plus simple posture tips.</p>
+            <p>macOS notifications after you've sat or stood too long, plus simple posture tips.</p>
           </li>
           <li>
             <h3>Your key, your camera</h3>
@@ -871,9 +903,9 @@
       </section>
 
       <section class="install content" id="open" aria-labelledby="open-title">
-        <h2 id="open-title">If Mac won’t open it the first time</h2>
+        <h2 id="open-title">If Mac won't open it the first time</h2>
         <p class="install-lede">
-          Apple may show an unverified-developer warning — Standing isn’t notarized yet.
+          Apple may show an unverified-developer warning — Standing isn't notarized yet.
           One-time only; after that it opens normally.
         </p>
         <ul class="install-steps">
@@ -882,13 +914,19 @@
           </li>
           <li>
             Control-click Standing → <strong>Open</strong>, then confirm
-            <strong>Open</strong> again (a normal double-click won’t unlock it once).
+            <strong>Open</strong> again (a normal double-click won't unlock it once).
           </li>
           <li>
             Or in <strong>System Settings → Privacy &amp; Security</strong>, choose
             <strong>Open Anyway</strong> next to the Standing message.
           </li>
         </ul>
+        <div class="install-cli">
+          <p>
+            Prefer Terminal? After it's in Applications, clear the quarantine flag:
+          </p>
+          <pre><code>xattr -cr /Applications/Standing.app</code></pre>
+        </div>
         <p class="install-note">
           Camera and notification prompts are separate — allow those when macOS asks.
         </p>
@@ -904,6 +942,8 @@
           <a href="https://buymeacoffee.com/joelhanson" target="_blank" rel="noopener noreferrer">Support</a>
           ·
           <a href="#how">How</a>
+          ·
+          <a href="privacy.html">Privacy</a>
           ·
           <a href="https://github.com/Joel-hanson/standing">GitHub</a>
         </p>

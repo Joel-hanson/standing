@@ -98,7 +98,11 @@ struct SettingsView: View {
                     Text(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "—")
                         .foregroundStyle(.secondary)
                 }
-                if updater.isConfigured {
+                if StandingDistribution.current.isMacAppStore {
+                    Text("Updates are delivered through the Mac App Store.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else if updater.isConfigured {
                     Button("Check for Updates…") { updater.checkForUpdates() }
                 } else {
                     Text("Auto-updates activate after the app is packaged with a Sparkle feed URL.")

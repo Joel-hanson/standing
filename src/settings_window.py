@@ -2,29 +2,17 @@
 
 from __future__ import annotations
 
+import webbrowser
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from AppKit import (
-    NSBackingStoreBuffered,
-    NSBezelStyleRounded,
-    NSButton,
-    NSButtonTypeMomentaryPushIn,
-    NSButtonTypeSwitch,
-    NSColor,
-    NSFont,
-    NSMakeRect,
-    NSSecureTextField,
-    NSTextAlignmentRight,
-    NSTextField,
-    NSView,
-    NSWindow,
-    NSWindowStyleMaskClosable,
-    NSWindowStyleMaskTitled,
-)
-from Foundation import NSObject
 import objc
-import webbrowser
+from AppKit import (NSBackingStoreBuffered, NSBezelStyleRounded, NSButton,
+                    NSButtonTypeMomentaryPushIn, NSButtonTypeSwitch, NSColor,
+                    NSFont, NSMakeRect, NSSecureTextField,
+                    NSTextAlignmentRight, NSTextField, NSView, NSWindow,
+                    NSWindowStyleMaskClosable, NSWindowStyleMaskTitled)
+from Foundation import NSObject
 
 from src.support import open_support, support_menu_title
 
@@ -132,7 +120,7 @@ class _SettingsController(NSObject):
         self._sync_save_enabled()
 
     def _build(self) -> None:
-        # Compact preference pane — fixed width so rows don’t stretch.
+        # Compact preference pane — fixed width so rows don't stretch.
         # Base layout + Support section (~90px with title).
         width, height = 400, 646 + 90
         margin = 18

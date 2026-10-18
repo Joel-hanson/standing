@@ -4,16 +4,17 @@
 #
 # Usage:
 #   ./scripts/package-app.sh              # dev: points at repo .venv
-#   ./scripts/package-app.sh --release    # ship: host-arch Swift + bundled CPython
+#   ./scripts/package-app.sh --release    # ship: notarized DMG path (Sparkle OK)
+#   ./scripts/package-app.sh --mas        # Mac App Store: sandbox entitlements, no Sparkle feed
 #
-# Release builds ship a relocatable CPython under StandingPayload/python/ so
+# Release/MAS builds ship a relocatable CPython under StandingPayload/python/ so
 # customers do not need Python installed. Build natively per arch (arm64 on
 # Apple Silicon, x86_64 on Intel) — GitHub Actions uses a matrix.
 #
 # Env:
 #   STANDING_APP_VERSION / STANDING_APP_BUILD
 #   STANDING_SHIP_ARCH   optional override (must match host: arm64|x86_64)
-#   STANDING_SPARKLE_FEED_URL / STANDING_SPARKLE_PUBLIC_ED_KEY
+#   STANDING_SPARKLE_FEED_URL / STANDING_SPARKLE_PUBLIC_ED_KEY  (ignored for --mas)
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -191,8 +192,9 @@ MODE="dev"
 for arg in "$@"; do
   case "$arg" in
     --release) MODE="release" ;;
+    --mas) MODE="mas" ;;
     -h|--help)
-      sed -n '2,12p' "$0"
+      sed -n '2,14p' "$0"
       exit 0
       ;;
     *)
@@ -211,13 +213,32 @@ NATIVE="$ROOT/native/Standing"
 APP="$NATIVE/Standing.app"
 BIN_DIR="$NATIVE/.build/${SHIP_ARCH}-apple-macosx/release"
 
-APP_VERSION="${STANDING_APP_VERSION:-0.1.0}"
+APP_VERSION="${STANDING_APP_VERSION:-0.2.0}"
 APP_BUILD="${STANDING_APP_BUILD:-1}"
 SPARKLE_FEED_URL="${STANDING_SPARKLE_FEED_URL:-}"
 SPARKLE_PUBLIC_ED_KEY="${STANDING_SPARKLE_PUBLIC_ED_KEY:-}"
 
-if [[ "$MODE" == "release" && "$SHIP_ARCH" != "$HOST_ARCH" ]]; then
-  echo "Release packaging must run on a $SHIP_ARCH Mac (host is $HOST_ARCH)." >&2
+# Both release and mas embed the Python worker; only distribution metadata differs.
+EMBED_PAYLOAD=0
+case "$MODE" in
+  release|mas) EMBED_PAYLOAD=1 ;;
+esac
+
+DISTRIBUTION="development"
+ENTITLEMENTS_FILE="$NATIVE/Standing.entitlements"
+case "$MODE" in
+  release) DISTRIBUTION="direct" ;;
+  mas)
+    DISTRIBUTION="mas"
+    ENTITLEMENTS_FILE="$NATIVE/Standing.mas.entitlements"
+    # App Store owns updates — never bake a Sparkle feed into MAS builds.
+    SPARKLE_FEED_URL=""
+    SPARKLE_PUBLIC_ED_KEY=""
+    ;;
+esac
+
+if [[ "$EMBED_PAYLOAD" -eq 1 && "$SHIP_ARCH" != "$HOST_ARCH" ]]; then
+  echo "Release/MAS packaging must run on a $SHIP_ARCH Mac (host is $HOST_ARCH)." >&2
   echo "Cross-arch OpenCV/NumPy wheels are not supported — use the CI matrix." >&2
   exit 1
 fi
@@ -244,21 +265,28 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" "$APP/Contents/Framewor
 chmod +x "$APP/Contents/MacOS/Standing"
 require_macho_arch "$APP/Contents/MacOS/Standing" "$SHIP_ARCH"
 
-# App icon (notifications, Finder, Dock) — built from the web brand mark.
-ICON_SRC="$ROOT/web/icons/icon-512.png"
+# App icon (notifications, Finder, Dock).
 ICON_ICNS="$APP/Contents/Resources/AppIcon.icns"
-if [[ -f "$ICON_SRC" ]]; then
-  echo "Building AppIcon.icns…" >&2
-  if sips -s format icns "$ICON_SRC" --out "$ICON_ICNS" >/dev/null; then
+ICON_ASSET_ICNS="$ROOT/assets/AppIcon.icns"
+ICON_FALLBACK_PNG="$ROOT/web/icons/icon-512.png"
+if [[ -f "$ICON_ASSET_ICNS" ]]; then
+  echo "Copying AppIcon.icns…" >&2
+  /bin/cp -f "$ICON_ASSET_ICNS" "$ICON_ICNS"
+  echo "App icon: $ICON_ICNS" >&2
+elif [[ -f "$ICON_FALLBACK_PNG" ]]; then
+  echo "Building AppIcon.icns from web brand mark…" >&2
+  if sips -s format icns "$ICON_FALLBACK_PNG" --out "$ICON_ICNS" >/dev/null; then
     echo "App icon: $ICON_ICNS" >&2
   else
     echo "Warning: could not build AppIcon.icns — notifications will show the placeholder icon." >&2
   fi
 else
-  echo "Warning: missing $ICON_SRC — packaging without AppIcon.icns." >&2
+  echo "Warning: missing app icon assets — packaging without AppIcon.icns." >&2
 fi
 
-# Embed Sparkle.framework from the SwiftPM build.
+# Embed Sparkle.framework from the SwiftPM build (direct/dev only).
+# MAS builds still link Sparkle at compile time today, so keep the framework
+# present but never configure a feed — UI hides Check for Updates.
 SPARKLE_FW=""
 for candidate in \
   "$NATIVE"/.build/artifacts/sparkle/Sparkle/Sparkle.xcframework/macos-arm64_x86_64/Sparkle.framework \
@@ -282,7 +310,7 @@ else
 fi
 
 SPARKLE_PLIST_KEYS=""
-if [[ -n "$SPARKLE_FEED_URL" && -n "$SPARKLE_PUBLIC_ED_KEY" ]]; then
+if [[ "$MODE" != "mas" && -n "$SPARKLE_FEED_URL" && -n "$SPARKLE_PUBLIC_ED_KEY" ]]; then
   SPARKLE_PLIST_KEYS=$(cat <<EOF
 	<key>SUFeedURL</key>
 	<string>${SPARKLE_FEED_URL}</string>
@@ -295,10 +323,10 @@ EOF
   echo "Sparkle feed: $SPARKLE_FEED_URL" >&2
 fi
 
-# Dev builds bake absolute repo paths. Release builds omit them so the app
+# Dev builds bake absolute repo paths. Release/MAS omit them so the app
 # resolves StandingPayload inside Resources (see PythonBridge.resolveRepoRoot).
 LS_ENVIRONMENT=""
-if [[ "$MODE" == "dev" ]]; then
+if [[ "$EMBED_PAYLOAD" -eq 0 ]]; then
   LS_ENVIRONMENT=$(cat <<EOF
 	<key>LSEnvironment</key>
 	<dict>
@@ -429,6 +457,12 @@ EOF
 )
 fi
 
+# Privacy manifest required for App Store uploads (also fine in direct builds).
+PRIVACY_SRC="$NATIVE/PrivacyInfo.xcprivacy"
+if [[ -f "$PRIVACY_SRC" ]]; then
+  cp "$PRIVACY_SRC" "$APP/Contents/Resources/PrivacyInfo.xcprivacy"
+fi
+
 cat > "$APP/Contents/Info.plist" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -443,6 +477,8 @@ cat > "$APP/Contents/Info.plist" <<EOF
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
+	<string>Standing</string>
+	<key>CFBundleDisplayName</key>
 	<string>Standing</string>
 	<key>CFBundleIconFile</key>
 	<string>AppIcon</string>
@@ -459,20 +495,25 @@ cat > "$APP/Contents/Info.plist" <<EOF
 	<key>NSHighResolutionCapable</key>
 	<true/>
 	<key>NSCameraUsageDescription</key>
-	<string>Standing uses the camera to check whether you are sitting or standing at your desk.</string>
+	<string>Standing uses the camera to check whether you are sitting or standing at your desk. Short stills may be sent to TypeSafe (Jev) with your own API key when a posture check is needed.</string>
+	<key>StandingDistribution</key>
+	<string>${DISTRIBUTION}</string>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 ${SPARKLE_PLIST_KEYS}
 ${LS_ENVIRONMENT}
 </dict>
 </plist>
 EOF
 
-# Ad-hoc sign for local runs (camera + hardened-runtime relaxations).
-ENTITLEMENTS="$NATIVE/Standing.entitlements"
-if [[ -f "$ENTITLEMENTS" ]]; then
-  echo "Ad-hoc codesign…" >&2
-  codesign --force --deep --sign - --entitlements "$ENTITLEMENTS" "$APP" 2>/dev/null \
+# Ad-hoc sign for local runs (camera + hardened-runtime / sandbox entitlements).
+if [[ -f "$ENTITLEMENTS_FILE" ]]; then
+  echo "Ad-hoc codesign (entitlements: $(basename "$ENTITLEMENTS_FILE"))…" >&2
+  codesign --force --deep --sign - --entitlements "$ENTITLEMENTS_FILE" "$APP" 2>/dev/null \
     || echo "Warning: codesign failed — camera / embedded libs may be limited." >&2
+else
+  echo "Warning: missing entitlements at $ENTITLEMENTS_FILE" >&2
 fi
 
-echo "Standing.app ready: $APP" >&2
+echo "Standing.app ready: $APP (distribution=$DISTRIBUTION)" >&2
 echo "$APP"

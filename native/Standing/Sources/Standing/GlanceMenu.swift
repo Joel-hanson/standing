@@ -54,12 +54,14 @@ struct GlanceMenu: View {
             Text("Settings…")
         }
 
-        if updater.isConfigured {
+        if !StandingDistribution.current.isMacAppStore, updater.isConfigured {
             Button("Check for Updates…") {
                 updater.checkForUpdates()
             }
         }
 
+        // Patronage tip (not a feature unlock). Still allowed to show on MAS builds;
+        // see store/REVIEW_NOTES.md if Review objects.
         Link("Support Standing…", destination: SupportLinks.oneTimeURL)
 
         Button("Quit Standing") {

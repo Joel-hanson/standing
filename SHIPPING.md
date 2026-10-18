@@ -1,16 +1,19 @@
 # Shipping Standing (AI-based standing tracker)
 
-## Decision: DMG first, Mac App Store later
+## Decision: DMG now, Mac App Store next
 
-**Ship a notarized DMG (direct download) first.** Move to the Mac App Store only after the product and privacy story are stable.
+**Notarized DMG remains the primary channel.** Mac App Store packaging is prepared
+in-repo — follow [`store/APP_STORE.md`](store/APP_STORE.md) when you are ready to
+create the App Store Connect record and upload a `.pkg`.
 
-| | DMG (recommended now) | Mac App Store |
+| | DMG (shipping) | Mac App Store (prepared) |
 | --- | --- | --- |
-| Effort | Days | Weeks+ |
+| Effort | Days | Days to first upload; Review may take longer |
 | Review | Apple notarization only | Full App Review |
-| Camera + BYO API key | Straightforward | Extra privacy labels + review risk |
-| Stack today | **Lane A** rumps *or* **Lane B** SwiftUI + Python worker | Prefer Lane B shell; eventually fold worker into app |
-| Updates | Sparkle + hosted appcast/DMG | App Store Connect |
+| Camera + BYO API key | Straightforward | Privacy policy + nutrition labels ([`web/privacy.html`](web/privacy.html)) |
+| Stack today | **Lane B** SwiftUI + Python worker | Same; sandbox entitlements in `Standing.mas.entitlements` |
+| Package | `./scripts/package-dmg.sh` | `./scripts/package-mas.sh` |
+| Updates | Sparkle + hosted appcast/DMG | App Store Connect (no Sparkle feed) |
 
 ## Architecture (current)
 
@@ -27,7 +30,7 @@
 ## Why not Store yet
 - Sandbox + camera + third-party AI image upload needs a clear privacy policy
 - Bundling a Python runtime + OpenCV inside a sandboxed app needs packaging work
-- Requiring every customer’s TypeSafe key is fine, but Review will scrutinize it
+- Requiring every customer's TypeSafe key is fine, but Review will scrutinize it
 
 ## Secrets (do not ship your key)
 
@@ -44,12 +47,12 @@
 Local:
 
 ```bash
-export STANDING_APP_VERSION=0.1.0
-export STANDING_APP_BUILD=2
+export STANDING_APP_VERSION=0.2.0
+export STANDING_APP_BUILD=3
 # optional Sparkle:
 # export STANDING_SPARKLE_FEED_URL=https://…/appcast.xml
 # export STANDING_SPARKLE_PUBLIC_ED_KEY=…
-./scripts/package-dmg.sh   # → dist/Standing-0.1.0.dmg
+./scripts/package-dmg.sh   # → dist/Standing-0.2.0.dmg
 ```
 
 **Multi-arch DMGs (native per CPU).** GitHub Actions builds two release
@@ -97,8 +100,8 @@ Locally: `./scripts/ci-smoke.sh` (host arch). Release-embed smoke:
 Push a version tag (or run **Release** via workflow_dispatch):
 
 ```bash
-git tag v0.1.0
-git push origin v0.1.0
+git tag v0.2.0
+git push origin v0.2.0
 ```
 
 Workflow: [`.github/workflows/release.yml`](.github/workflows/release.yml)
@@ -136,8 +139,8 @@ Lane B ships with [Sparkle](https://sparkle-project.org). Local/dev builds omit 
 
 **Package a release build with updates enabled**
 ```bash
-export STANDING_APP_VERSION=0.1.0
-export STANDING_APP_BUILD=2
+export STANDING_APP_VERSION=0.2.0
+export STANDING_APP_BUILD=3
 export STANDING_SPARKLE_FEED_URL="https://YOUR_HOST/appcast.xml"
 export STANDING_SPARKLE_PUBLIC_ED_KEY="YOUR_ED25519_PUBLIC_KEY"
 ./scripts/run-native.sh
@@ -149,13 +152,26 @@ export STANDING_SPARKLE_PUBLIC_ED_KEY="YOUR_ED25519_PUBLIC_KEY"
 3. Run `sign_update Standing.dmg` and paste signature + length into `appcast.xml`
 4. Publish the DMG + updated appcast — existing installs pick it up (or via **Check for Updates…**)
 
-## Store path (later)
-1. Keep SwiftUI `MenuBarExtra` shell (Lane B)  
-2. Move sit/stand detection on-device (Vision) where possible; Jev as Pro accuracy  
-3. Keychain for API key; App Store privacy nutrition labels  
-4. Drop or tightly sandbox the Python helper  
+## Store path
 
-This repo already has: Keychain API key, suggestions + notifications, cost-aware Jev calls, and a SwiftUI shell over the same core — enough to validate before packaging.
+**Ready in repo**
+1. Lane B SwiftUI shell + sandboxed MAS entitlements  
+2. `PrivacyInfo.xcprivacy`, privacy policy page, App Review notes  
+3. `./scripts/package-app.sh --mas` and `./scripts/package-mas.sh`  
+4. Listing draft + checklist: [`store/APP_STORE.md`](store/APP_STORE.md)
+
+**Still on you (Apple account)**
+1. App ID + Mac App Store provisioning profile for `ai.standing.mac`  
+2. Apple Distribution + Mac Installer certificates  
+3. App Store Connect record, screenshots, privacy nutrition labels  
+4. Upload `.pkg` via Transporter and answer Review
+
+**After first approval (product hardening)**
+1. Prefer on-device Vision for sit/stand; keep Jev as optional accuracy  
+2. Consider dropping Sparkle from the MAS binary entirely (feed already omitted)  
+3. Universal binary / multi-arch Store package if you need Intel + Apple Silicon in one upload  
+
+This repo already has: local API key storage, suggestions + notifications, cost-aware Jev calls, and a SwiftUI shell over the same core.
 
 ## Monetization (one-time Support)
 

@@ -1,10 +1,11 @@
 # Standing
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-ffdd00?style=flat&logo=buy-me-a-coffee&logoColor=black)](https://buymeacoffee.com/joelhanson)
 
 Watches your webcam, decides sit vs stand, and nudges you when one posture lasts too long. Motion-gated locally; only sends a small JPEG to [Jev](https://docs.typesafe.ai/images) when a new check is worthwhile.
 
-**DMG downloads** ship per Mac CPU (`arm64` and `x86_64`), each with its own Python runtime — you do not need Python installed.
+**DMG downloads** ship per Mac CPU (`arm64` and `x86_64`), each with its own Python runtime — you do not need Python installed. Mac App Store packaging is prepared under [`store/APP_STORE.md`](store/APP_STORE.md) (`./scripts/package-mas.sh`).
 
 ## Setup
 

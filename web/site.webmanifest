@@ -1,7 +1,7 @@
 {
   "name": "Standing",
   "short_name": "Standing",
-  "description": "AI-based standing tracker for Mac. Quiet menu bar app that watches your desk posture and nudges you when you’ve sat too long.",
+  "description": "AI-based standing tracker for Mac. Quiet menu bar app that watches your desk posture and nudges you when you've sat too long.",
   "start_url": ".",
   "display": "standalone",
   "background_color": "#0a0a0a",

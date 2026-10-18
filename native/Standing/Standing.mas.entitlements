@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Required for Mac App Store -->
+	<key>com.apple.security.app-sandbox</key>
+	<true/>
+
+	<!-- Webcam posture checks -->
+	<key>com.apple.security.device.camera</key>
+	<true/>
+
+	<!-- HTTPS to TypeSafe / Jev when the user supplies their API key -->
+	<key>com.apple.security.network.client</key>
+	<true/>
+
+	<!-- Embedded CPython + OpenCV/NumPy need these Hardened Runtime exceptions.
+	     Keep the set minimal; App Review may ask why. Document in store/REVIEW_NOTES.md. -->
+	<key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+	<true/>
+	<key>com.apple.security.cs.disable-library-validation</key>
+	<true/>
+
+	<!-- Allow spawning StandingWorker (embedded interpreter) from the app bundle -->
+	<key>com.apple.security.cs.allow-jit</key>
+	<true/>
+</dict>
+</plist>
