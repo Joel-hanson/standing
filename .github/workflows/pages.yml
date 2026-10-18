@@ -1,9 +1,13 @@
 # Deploy web/ to GitHub Pages → https://standing.joelhanson.com
 #
+# Pages source MUST be "GitHub Actions" (not "Deploy from a branch").
+# Branch deploy creates a second automatic workflow (pages-build-deployment)
+# that publishes the whole repo and races this one.
+#
 # One-time (human):
-#   1. Repo Settings → Pages → Source: GitHub Actions
-#   2. DNS CNAME: standing → Joel-hanson.github.io
-#   3. Pages → Custom domain: standing.joelhanson.com (HTTPS enforced)
+#   1. Settings → Pages → Source: GitHub Actions
+#   2. DNS CNAME: standing → Joel-hanson.github.io (Cloudflare: DNS only)
+#   3. Pages → Custom domain: standing.joelhanson.com (Enforce HTTPS)
 #
 # Repo must be public (or GitHub Pro) for Pages on the free plan.
 

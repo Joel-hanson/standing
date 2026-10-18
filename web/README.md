@@ -5,13 +5,16 @@ Published at **https://standing.joelhanson.com** via GitHub Pages
 
 ## DNS (one-time)
 
-At your DNS host for `joelhanson.com`:
+At Cloudflare for `joelhanson.com`:
 
-| Type | Name | Target |
-| --- | --- | --- |
-| `CNAME` | `standing` | `Joel-hanson.github.io` |
+| Type | Name | Target | Proxy |
+| --- | --- | --- | --- |
+| `CNAME` | `standing` | `Joel-hanson.github.io` | DNS only (grey cloud) |
 
-Then in the Standing repo: **Settings → Pages → Custom domain** →
-`standing.joelhanson.com`, enable **Enforce HTTPS**.
+Then: **Settings → Pages → Source: GitHub Actions**, custom domain
+`standing.joelhanson.com`, **Enforce HTTPS**.
+
+Do **not** set Pages to “Deploy from a branch” — that enables GitHub’s
+`pages-build-deployment` job alongside this workflow.
 
 Repo must be **public** (or GitHub Pro) for Pages on the free plan.
