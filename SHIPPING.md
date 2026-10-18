@@ -10,7 +10,7 @@ create the App Store Connect record and upload a `.pkg`.
 | --- | --- | --- |
 | Effort | Days | Days to first upload; Review may take longer |
 | Review | Apple notarization only | Full App Review |
-| Camera + BYO API key | Straightforward | Privacy policy + nutrition labels ([`web/privacy.html`](web/privacy.html)) |
+| Camera + BYO API key | Straightforward | Privacy policy + nutrition labels ([standing.joelhanson.com](https://standing.joelhanson.com/privacy.html)) |
 | Stack today | **Lane B** SwiftUI + Python worker | Same; sandbox entitlements in `Standing.mas.entitlements` |
 | Package | `./scripts/package-dmg.sh` | `./scripts/package-mas.sh` |
 | Updates | Sparkle + hosted appcast/DMG | App Store Connect (no Sparkle feed) |

@@ -1,9 +1,11 @@
-# Sync web/ → Joel-hanson/joel-hanson.github.io/static/standing
-# (private repos can't use GitHub Pages on the free plan; the personal site
-# already owns joelhanson.com, so /standing is published from there.)
+# Deploy web/ to GitHub Pages → https://standing.joelhanson.com
 #
-# One-time: add repo secret SITE_DEPLOY_TOKEN — a fine-grained PAT with
-# Contents: Read and write on Joel-hanson/joel-hanson.github.io
+# One-time (human):
+#   1. Repo Settings → Pages → Source: GitHub Actions
+#   2. DNS CNAME: standing → Joel-hanson.github.io
+#   3. Pages → Custom domain: standing.joelhanson.com (HTTPS enforced)
+#
+# Repo must be public (or GitHub Pro) for Pages on the free plan.
 
 name: Deploy site
 
@@ -17,44 +19,35 @@ on:
 
 permissions:
   contents: read
+  pages: write
+  id-token: write
 
 concurrency:
-  group: deploy-site
+  group: pages
   cancel-in-progress: true
 
 jobs:
-  deploy:
+  build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Standing
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Checkout personal site
-        uses: actions/checkout@v4
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
         with:
-          repository: Joel-hanson/joel-hanson.github.io
-          token: ${{ secrets.SITE_DEPLOY_TOKEN }}
-          path: site
+          path: web
 
-      - name: Sync web → static/standing
-        run: |
-          set -euo pipefail
-          rm -rf site/static/standing
-          mkdir -p site/static/standing
-          rsync -a --delete \
-            --exclude '.DS_Store' \
-            web/ site/static/standing/
-
-      - name: Commit and push
-        working-directory: site
-        run: |
-          set -euo pipefail
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add static/standing
-          if git diff --staged --quiet; then
-            echo "No site changes."
-            exit 0
-          fi
-          git commit -m "Update Standing landing page from Joel-hanson/standing"
-          git push
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

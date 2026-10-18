@@ -25,7 +25,7 @@ There is no login. Without an API key, Start Tracking stays hidden (by design).
 - Camera entitlement: posture stills only.  
 - Outbound HTTPS: TypeSafe Jev image API, only when the user has saved an API
   key and a check runs.  
-- Privacy policy: https://joelhanson.com/standing/privacy.html  
+- Privacy policy: https://standing.joelhanson.com/privacy.html  
 
 ## Technical notes reviewers may ask about
 - The app embeds a private **Python helper** (`StandingWorker`) plus OpenCV/NumPy

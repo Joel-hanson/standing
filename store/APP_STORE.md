@@ -4,7 +4,7 @@ Standing can ship as a **notarized DMG** today. This folder is the checklist and
 assets to list the same Lane B app (`ai.standing.mac`) on the Mac App Store.
 
 Privacy policy URL (required in App Store Connect):
-**https://joelhanson.com/standing/privacy.html**
+**https://standing.joelhanson.com/privacy.html**
 
 ## Status snapshot
 
@@ -14,7 +14,7 @@ Privacy policy URL (required in App Store Connect):
 | Sandbox entitlements | `native/Standing/Standing.mas.entitlements` |
 | Privacy manifest | `native/Standing/PrivacyInfo.xcprivacy` |
 | MAS packaging | `./scripts/package-mas.sh` → `.pkg` |
-| Privacy policy page | `web/privacy.html` (deploy via Pages workflow) |
+| Privacy policy page | `web/privacy.html` → https://standing.joelhanson.com/privacy.html |
 | Sparkle on MAS | Feed never baked; UI says “Updates via Mac App Store” |
 | Embedded Python + OpenCV | Still required — main Review risk |
 | App Store Connect record | **You create** (manual) |

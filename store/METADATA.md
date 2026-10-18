@@ -46,10 +46,10 @@ Mac App Store packaging path, privacy policy, improved app icon, and clearer upd
 https://github.com/Joel-hanson/standing
 
 ## Marketing URL
-https://joelhanson.com/standing/
+https://standing.joelhanson.com/
 
 ## Privacy Policy URL
-https://joelhanson.com/standing/privacy.html
+https://standing.joelhanson.com/privacy.html
 
 ## Copyright
 © 2026 Joel Hanson
