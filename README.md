@@ -5,8 +5,6 @@
 
 Watches your webcam, decides sit vs stand, and nudges you when one posture lasts too long. Motion-gated locally; only sends a small JPEG to [Jev](https://docs.typesafe.ai/images) when a new check is worthwhile.
 
-**DMG downloads** ship per Mac CPU (`arm64` and `x86_64`), each with its own Python runtime — you do not need Python installed. Mac App Store packaging is prepared under [`store/APP_STORE.md`](store/APP_STORE.md) (`./scripts/package-mas.sh`).
-
 ## Setup
 
 ```bash
@@ -23,13 +21,6 @@ Data lives in `~/Library/Application Support/Standing/`; logs in `~/Library/Logs
 
 ## Run
 
-| Shell | Command | Notes |
-| --- | --- | --- |
-| rumps (Python) | `python -m src.main` | Fast iteration |
-| SwiftUI | `./scripts/run-native.sh` | Native menu bar — use this, not bare `swift run` |
-
-Both drive the same `StandingCore` in `src/core.py`.
-
 ```bash
-python -m src.main --sit-warn-minutes 25 --stand-warn-minutes 40 -v
+./scripts/run-native.sh
 ```
